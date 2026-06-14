@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 from urllib.parse import urljoin
 
-import anthropic
+from mistralai import Mistral
 import dns.resolver
 import httpx
 from bs4 import BeautifulSoup
@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
 
@@ -414,7 +414,7 @@ async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Respo
     except Exception:
         return None
 
-# ─── Claude GEO synthesis ─────────────────────────────────────────────────────
+# ─── Mistral GEO synthesis ────────────────────────────────────────────────────
 
 def geo_synthesis(domain: str, homepage: dict, llms_txt: Optional[str], stack: dict) -> dict:
     stack_summary = (
@@ -440,17 +440,15 @@ Return a JSON object with exactly these keys:
 - target_market: who they serve (max 80 chars)
 - tone_of_voice: e.g. "technical", "enterprise", "friendly B2B" (max 40 chars)
 - ai_readiness_score: integer 0-100 (100 = fully AI-crawler-ready: has llms.txt, allows all bots, rich schema.org, clear positioning)
-- geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "Blocks GPTBot in robots.txt", "No schema.org markup")
-
-Return only valid JSON, no markdown fences."""
+- geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "Blocks GPTBot in robots.txt", "No schema.org markup")"""
 
     try:
-        response = claude_client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=512,
+        response = mistral_client.chat.complete(
+            model="mistral-small-latest",
             messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -647,7 +645,7 @@ async def scan(request: Request, body: ScanRequest):
         "geo_ai_readiness_score": geo.get("ai_readiness_score"),
         "geo_gaps": geo.get("geo_gaps", []),
         "geo_synthesis_raw": geo.get("raw"),
-        "geo_model_used": "claude-sonnet-4-6",
+        "geo_model_used": "mistral-small-latest",
     }
 
     scan_id = None

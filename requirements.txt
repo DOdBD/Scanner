@@ -4,7 +4,7 @@ httpx
 dnspython
 beautifulsoup4
 lxml
-anthropic
+mistralai
 supabase
 python-dotenv
 pydantic
