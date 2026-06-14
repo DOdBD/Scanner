@@ -92,8 +92,7 @@ create table if not exists scans (
   geo_ai_readiness_score  integer,
   geo_gaps                text[],
   geo_synthesis_raw       text,
-  geo_model_used          text,
-
+  geo_model_used          text
 );
 
 -- ─── FK back-reference ────────────────────────────────────────────────────────

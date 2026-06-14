@@ -444,21 +444,28 @@ Return a JSON object with exactly these keys:
 
 Return only valid JSON, no markdown fences."""
 
-    response = claude_client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = response.content[0].text.strip()
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        parsed = {
+        response = claude_client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = {
+                "positioning": None, "target_market": None,
+                "tone_of_voice": None, "ai_readiness_score": None, "geo_gaps": [],
+            }
+        parsed["raw"] = raw
+        return parsed
+    except Exception as e:
+        return {
             "positioning": None, "target_market": None,
-            "tone_of_voice": None, "ai_readiness_score": None, "geo_gaps": [],
+            "tone_of_voice": None, "ai_readiness_score": None,
+            "geo_gaps": [], "raw": None, "_error": str(e),
         }
-    parsed["raw"] = raw
-    return parsed
 
 
 # ─── Request model ────────────────────────────────────────────────────────────
@@ -643,22 +650,27 @@ async def scan(request: Request, body: ScanRequest):
         "geo_model_used": "claude-sonnet-4-6",
     }
 
-    # Mark previous scans for this domain as not latest
-    supabase.table("scans").update({"is_latest": False}).eq("domain", raw_domain).eq("is_latest", True).execute()
-
-    result = supabase.table("scans").insert(scan_row).execute()
-    scan_id = result.data[0]["id"] if result.data else None
+    scan_id = None
+    try:
+        supabase.table("scans").update({"is_latest": False}).eq("domain", raw_domain).eq("is_latest", True).execute()
+        result = supabase.table("scans").insert(scan_row).execute()
+        scan_id = result.data[0]["id"] if result.data else None
+    except Exception as e:
+        print(f"[supabase] scan write failed: {e}")
 
     # ── 9. Write lead if email provided ───────────────────────────────────────
     if body.email and scan_id:
-        lead_row = {
-            "email": body.email,
-            "domain": raw_domain,
-            "first_scan_id": scan_id,
-            "gdpr_consent": True,
-            "gdpr_consent_at": "now()",
-        }
-        supabase.table("leads").upsert(lead_row, on_conflict="email").execute()
+        try:
+            lead_row = {
+                "email": body.email,
+                "domain": raw_domain,
+                "first_scan_id": scan_id,
+                "gdpr_consent": True,
+                "gdpr_consent_at": "now()",
+            }
+            supabase.table("leads").upsert(lead_row, on_conflict="email").execute()
+        except Exception as e:
+            print(f"[supabase] lead write failed: {e}")
 
     # ── 10. Return result ─────────────────────────────────────────────────────
     return {
