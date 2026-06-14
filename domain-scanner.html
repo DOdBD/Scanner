@@ -229,10 +229,15 @@ function render(r){
 
   // ── Verified vendors ──────────────────────────────────────────────────────
   const vendors = r.verified_vendors || [];
-  html += card("✅","Verified vendors &amp; AI tools", emptyOr(vendors, vendors.map(t=>{
-    const ai = t.includes("OpenAI")||t.includes("Anthropic");
-    return tag(t, ai?"#16A34A":"#0891B2");
-  }).join("")), "from domain verification records");
+  const wikiColor = r.wikipedia_found ? "#16A34A" : "#9CA3AF";
+  const wikiLabel = r.wikipedia_found ? "Wikipedia page found" : "No Wikipedia page";
+  const wikiHtml = r.wikipedia_found
+    ? `<a href="${esc(r.wikipedia_url)}" target="_blank" style="text-decoration:none">${tag(wikiLabel, wikiColor)}</a>`
+    : tag(wikiLabel, wikiColor);
+  const vendorTags = vendors.map(t=>{ const ai=t.includes("OpenAI")||t.includes("Anthropic"); return tag(t,ai?"#16A34A":"#0891B2"); }).join("");
+  html += card("✅","Verified vendors &amp; AI tools",
+    `<div style="margin-bottom:8px">${wikiHtml}</div>` + emptyOr(vendors, vendorTags),
+    "domain verifications + knowledge graph");
 
   // ── GEO synthesis ─────────────────────────────────────────────────────────
   const gaps = r.geo_gaps || [];
@@ -255,8 +260,19 @@ function render(r){
   if(r.geo_target_market){
     geoInner += `<div class="meta-row"><span class="meta-key">Target market</span><span class="meta-val">${esc(r.geo_target_market)}</span></div>`;
   }
+  // stack delta
+  const delta = r.stack_delta;
+  if(delta && Object.keys(delta).length){
+    let deltaHtml = `<div style="margin-top:10px;font-size:11px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px">Changes since last scan</div>`;
+    for(const [field, changes] of Object.entries(delta)){
+      const label = field.replace(/_/g," ");
+      (changes.added||[]).forEach(v => deltaHtml += tag(`+ ${v} (${label})`, "#16A34A"));
+      (changes.removed||[]).forEach(v => deltaHtml += tag(`- ${v} (${label})`, "#DC2626"));
+    }
+    geoInner += deltaHtml;
+  }
   if(!geoInner) geoInner = `<span class="empty">GEO analysis not available</span>`;
-  html += card("🤖","GEO Analysis", geoInner, "Claude synthesis");
+  html += card("🤖","GEO Analysis", geoInner, "Mistral synthesis");
 
   // ── AI crawler access ─────────────────────────────────────────────────────
   let crawlerInner = "";
@@ -326,6 +342,13 @@ function render(r){
   if(r.homepage_og_title && r.homepage_og_title !== r.homepage_title)
     pageInner += `<div class="meta-row"><span class="meta-key">OG title</span><span class="meta-val">${esc(r.homepage_og_title)}</span></div>`;
   if(r.schema_org_type) pageInner += `<div class="meta-row"><span class="meta-key">Schema.org type</span><span class="meta-val">${esc(r.schema_org_type)}</span></div>`;
+  if(r.schema_org_completeness != null){
+    const sc = r.schema_org_completeness;
+    const scColor = sc >= 60 ? "#16A34A" : sc >= 30 ? "#D97706" : "#DC2626";
+    const fields = (r.schema_org_fields||[]).join(", ") || "none";
+    pageInner += `<div class="meta-row"><span class="meta-key">Schema.org score</span><span class="meta-val" style="color:${scColor};font-weight:700">${sc}/100</span></div>`;
+    if(r.schema_org_fields&&r.schema_org_fields.length) pageInner += `<div class="meta-row"><span class="meta-key">Fields present</span><span class="meta-val" style="font-size:12px;color:#6B7280">${esc(fields)}</span></div>`;
+  }
   if(r.homepage_word_count) pageInner += `<div class="meta-row"><span class="meta-key">Word count</span><span class="meta-val">${r.homepage_word_count.toLocaleString()}</span></div>`;
   if(!pageInner) pageInner = `<span class="empty">Homepage data not available</span>`;
   html += card("📄","Homepage content", pageInner);

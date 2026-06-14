@@ -92,7 +92,18 @@ create table if not exists scans (
   geo_ai_readiness_score  integer,
   geo_gaps                text[],
   geo_synthesis_raw       text,
-  geo_model_used          text
+  geo_model_used          text,
+
+  -- knowledge graph
+  wikipedia_found         boolean,
+  wikipedia_url           text,
+
+  -- schema.org completeness
+  schema_org_completeness integer,
+  schema_org_fields       text[],
+
+  -- stack delta (vs previous scan)
+  stack_delta             jsonb
 );
 
 -- ─── FK back-reference ────────────────────────────────────────────────────────

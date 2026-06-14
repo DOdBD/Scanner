@@ -400,6 +400,78 @@ def infer_country(tld: str) -> Optional[str]:
     }
     return mapping.get(tld)
 
+# ─── Company name extraction ──────────────────────────────────────────────────
+
+def extract_company_name(title: Optional[str], domain: str) -> str:
+    if title:
+        for sep in [" | ", " - ", " — ", " · ", " :: "]:
+            if sep in title:
+                return title.split(sep)[0].strip()
+        if len(title) < 40:
+            return title.strip()
+    name = domain.split(".")[0]
+    return name.replace("-", " ").replace("_", " ").title()
+
+# ─── Wikipedia check ──────────────────────────────────────────────────────────
+
+async def check_wikipedia(company_name: str) -> dict:
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query", "list": "search",
+                    "srsearch": company_name, "format": "json",
+                    "srlimit": "3", "origin": "*",
+                },
+                timeout=8, headers=HEADERS,
+            )
+            results = r.json().get("query", {}).get("search", [])
+            name_low = company_name.lower()
+            for result in results:
+                title_low = result["title"].lower()
+                if name_low in title_low or title_low.startswith(name_low):
+                    url = f"https://en.wikipedia.org/wiki/{result['title'].replace(' ', '_')}"
+                    return {"found": True, "url": url, "title": result["title"]}
+    except Exception:
+        pass
+    return {"found": False, "url": None, "title": None}
+
+# ─── Schema.org completeness ───────────────────────────────────────────────────
+
+SCHEMA_ORG_SCORED_FIELDS = {
+    "name": 10, "description": 10, "url": 10,
+    "logo": 5, "image": 5,
+    "sameAs": 15,           # links to LinkedIn, Crunchbase, Wikipedia — critical for AI entity linking
+    "foundingDate": 5, "numberOfEmployees": 5,
+    "address": 5, "areaServed": 5,
+    "telephone": 5, "email": 5,
+    "contactPoint": 5, "potentialAction": 5,
+}
+
+def score_schema_org(schema_raw: Optional[dict]) -> tuple:
+    if not schema_raw:
+        return 0, []
+    present = [f for f, pts in SCHEMA_ORG_SCORED_FIELDS.items() if schema_raw.get(f)]
+    score = sum(SCHEMA_ORG_SCORED_FIELDS[f] for f in present)
+    return min(score, 100), present
+
+# ─── Stack delta ───────────────────────────────────────────────────────────────
+
+def compute_stack_delta(current: dict, previous: dict) -> dict:
+    fields = ["cms", "crm", "marketing_tools", "internal_tools", "verified_vendors", "cdn", "hosting"]
+    delta = {}
+    for field in fields:
+        curr = set(current.get(field) or [])
+        prev = set(previous.get(field) or [])
+        added = sorted(curr - prev)
+        removed = sorted(prev - curr)
+        if added or removed:
+            delta[field] = {}
+            if added: delta[field]["added"] = added
+            if removed: delta[field]["removed"] = removed
+    return delta
+
 # ─── HTTP fetches ──────────────────────────────────────────────────────────────
 
 HEADERS = {
@@ -416,7 +488,15 @@ async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Respo
 
 # ─── Mistral GEO synthesis ────────────────────────────────────────────────────
 
-def geo_synthesis(domain: str, homepage: dict, llms_txt: Optional[str], stack: dict) -> dict:
+def geo_synthesis(
+    domain: str,
+    homepage: dict,
+    llms_txt: Optional[str],
+    stack: dict,
+    wikipedia: dict,
+    schema_completeness: int,
+    stack_delta: dict,
+) -> dict:
     stack_summary = (
         f"Email: {stack.get('email_provider') or 'unknown'}, "
         f"DNS: {stack.get('dns_host') or 'unknown'}, "
@@ -424,23 +504,35 @@ def geo_synthesis(domain: str, homepage: dict, llms_txt: Optional[str], stack: d
         f"CRM: {', '.join(stack.get('crm', [])) or 'unknown'}, "
         f"Marketing: {', '.join(stack.get('marketing_tools', [])) or 'unknown'}"
     )
+    delta_summary = ""
+    if stack_delta:
+        parts = []
+        for field, changes in stack_delta.items():
+            if changes.get("added"):
+                parts.append(f"+{', '.join(changes['added'])} ({field})")
+            if changes.get("removed"):
+                parts.append(f"-{', '.join(changes['removed'])} ({field})")
+        delta_summary = "Stack changes since last scan: " + "; ".join(parts)
+
     prompt = f"""You are analyzing {domain} for Generative Engine Optimization (GEO).
 
 Homepage title: {homepage.get('title') or 'N/A'}
 Homepage description: {homepage.get('description') or 'N/A'}
-OG title: {homepage.get('og_title') or 'N/A'}
 Schema.org type: {homepage.get('schema_org_type') or 'N/A'}
+Schema.org completeness: {schema_completeness}/100
 Word count: {homepage.get('word_count', 0)}
 Tech stack: {stack_summary}
+Wikipedia presence: {'yes — ' + wikipedia.get('url', '') if wikipedia.get('found') else 'no'}
 llms.txt present: {'yes' if llms_txt else 'no'}
 llms.txt content: {llms_txt[:800] if llms_txt else 'N/A'}
+{delta_summary}
 
 Return a JSON object with exactly these keys:
 - positioning: one sentence describing how this company positions itself (max 120 chars)
 - target_market: who they serve (max 80 chars)
 - tone_of_voice: e.g. "technical", "enterprise", "friendly B2B" (max 40 chars)
-- ai_readiness_score: integer 0-100 (100 = fully AI-crawler-ready: has llms.txt, allows all bots, rich schema.org, clear positioning)
-- geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "Blocks GPTBot in robots.txt", "No schema.org markup")"""
+- ai_readiness_score: integer 0-100 (100 = fully AI-crawler-ready: has llms.txt, allows all bots, rich schema.org, Wikipedia presence, clear positioning)
+- geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "No Wikipedia page", "Schema.org completeness only 15/100", "No schema.org markup")"""
 
     try:
         response = mistral_client.chat.complete(
@@ -585,12 +677,33 @@ async def scan(request: Request, body: ScanRequest):
         "cms": cms,
         "crm": crm,
         "marketing_tools": marketing_tools,
+        "internal_tools": internal_tools,
+        "verified_vendors": verifications,
+        "cdn": cdn,
+        "hosting": hosting,
     }
 
-    # ── 6. Claude GEO synthesis ───────────────────────────────────────────────
-    geo = geo_synthesis(raw_domain, homepage, llms_txt_content, stack)
+    # ── 6. Wikipedia + schema.org scoring + previous scan delta ──────────────
+    company_name = extract_company_name(homepage.get("title"), raw_domain)
+    wikipedia, (schema_completeness, schema_fields) = await asyncio.gather(
+        check_wikipedia(company_name),
+        asyncio.to_thread(score_schema_org, homepage.get("schema_org_raw")),
+    )
 
-    # ── 7. Write scan to Supabase ─────────────────────────────────────────────
+    stack_delta = {}
+    try:
+        prev = supabase.table("scans").select(
+            "cms,crm,marketing_tools,internal_tools,verified_vendors,cdn,hosting"
+        ).eq("domain", raw_domain).eq("is_latest", True).limit(1).execute()
+        if prev.data:
+            stack_delta = compute_stack_delta(stack, prev.data[0])
+    except Exception:
+        pass
+
+    # ── 7. GEO synthesis ──────────────────────────────────────────────────────
+    geo = geo_synthesis(raw_domain, homepage, llms_txt_content, stack, wikipedia, schema_completeness, stack_delta)
+
+    # ── 8. Write scan to Supabase ─────────────────────────────────────────────
     scan_row = {
         "domain": raw_domain,
         "scanner_ip_hash": ip_hash,
@@ -646,6 +759,11 @@ async def scan(request: Request, body: ScanRequest):
         "geo_gaps": geo.get("geo_gaps", []),
         "geo_synthesis_raw": geo.get("raw"),
         "geo_model_used": "mistral-small-latest",
+        "wikipedia_found": wikipedia.get("found", False),
+        "wikipedia_url": wikipedia.get("url"),
+        "schema_org_completeness": schema_completeness,
+        "schema_org_fields": schema_fields,
+        "stack_delta": stack_delta or None,
     }
 
     scan_id = None
@@ -714,6 +832,11 @@ async def scan(request: Request, body: ScanRequest):
         "geo_tone_of_voice": geo.get("tone_of_voice"),
         "geo_ai_readiness_score": geo.get("ai_readiness_score"),
         "geo_gaps": geo.get("geo_gaps", []),
+        "wikipedia_found": wikipedia.get("found", False),
+        "wikipedia_url": wikipedia.get("url"),
+        "schema_org_completeness": schema_completeness,
+        "schema_org_fields": schema_fields,
+        "stack_delta": stack_delta or None,
         "tld": tld,
         "inferred_country": country,
     }
