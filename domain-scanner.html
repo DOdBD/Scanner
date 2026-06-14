@@ -255,14 +255,7 @@ function render(r){
   if(r.geo_target_market){
     geoInner += `<div class="meta-row"><span class="meta-key">Target market</span><span class="meta-val">${esc(r.geo_target_market)}</span></div>`;
   }
-  if(!geoInner) geoInner = `
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#F8FAFC;border-radius:8px;border:1px dashed #CBD5E1">
-      <span style="font-size:20px">🚧</span>
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#1A2B4A">AI synthesis coming soon</div>
-        <div style="font-size:12px;color:#64748B;margin-top:2px">Claude will score AI-readiness and extract positioning, target market, and tone of voice.</div>
-      </div>
-    </div>`;
+  if(!geoInner) geoInner = `<span class="empty">GEO analysis not available</span>`;
   html += card("🤖","GEO Analysis", geoInner, "Claude synthesis");
 
   // ── AI crawler access ─────────────────────────────────────────────────────
