@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 from urllib.parse import urljoin
 
-from mistralai import Mistral
+from mistralai.client.sdk import Mistral
 import dns.resolver
 import httpx
 from bs4 import BeautifulSoup
