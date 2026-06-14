@@ -884,76 +884,115 @@ def build_email_html(s: dict) -> str:
     score = s.get("geo_ai_readiness_score")
     sc = _score_color(score)
     gaps = s.get("geo_gaps") or []
-    gaps_html = "".join(f"<li style='margin-bottom:4px'>{g}</li>" for g in gaps) or "<li>None detected</li>"
-    stack_items = [
-        ("Email", s.get("email_provider")),
-        ("DNS", s.get("dns_host")),
-        ("CDN", ", ".join(s.get("cdn") or [])),
-        ("Hosting", ", ".join(s.get("hosting") or [])),
-        ("CMS", ", ".join(s.get("cms") or [])),
-        ("CRM", ", ".join(s.get("crm") or [])),
-        ("Marketing", ", ".join(s.get("marketing_tools") or [])),
-    ]
-    stack_rows = "".join(
-        f"<tr><td style='padding:5px 0;color:#6B7280;font-size:12px;width:140px'>{k}</td>"
-        f"<td style='padding:5px 0;font-size:12px'>{v}</td></tr>"
-        for k, v in stack_items if v
-    )
+
+    def row(label, value, value_color="#1A2B4A"):
+        if not value: return ""
+        return (f"<tr>"
+                f"<td style='padding:10px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280;font-size:15px;width:160px;vertical-align:top'>{label}</td>"
+                f"<td style='padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:15px;color:{value_color};font-weight:600'>{value}</td>"
+                f"</tr>")
+
+    def badge(label, ok):
+        color = "#16A34A" if ok else "#DC2626"
+        mark = "&#10003;" if ok else "&#10007;"
+        return (f"<tr>"
+                f"<td style='padding:10px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280;font-size:15px;width:200px'>{label}</td>"
+                f"<td style='padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:15px;font-weight:700;color:{color}'>{mark} {'Allowed' if ok else 'Blocked'}</td>"
+                f"</tr>")
+
+    score_block = ""
+    if score is not None:
+        score_block = (
+            f"<table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:28px'><tr>"
+            f"<td style='background:{sc}10;border:2px solid {sc}30;border-radius:10px;padding:20px 24px;text-align:center'>"
+            f"<div style='font-size:52px;font-weight:800;color:{sc};line-height:1'>{score}</div>"
+            f"<div style='font-size:14px;color:#6B7280;margin-top:4px'>AI readiness score / 100</div>"
+            f"</td></tr></table>"
+        )
+
+    positioning_block = ""
+    if s.get("geo_positioning"):
+        positioning_block = (
+            f"<div style='background:#F0FDFA;border-left:4px solid #00B4A0;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:28px'>"
+            f"<div style='font-size:12px;font-weight:700;color:#00B4A0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px'>Positioning</div>"
+            f"<div style='font-size:16px;color:#1A2B4A;line-height:1.5'>{s['geo_positioning']}</div>"
+            f"{'<div style=\"font-size:14px;color:#6B7280;margin-top:6px\">Target: ' + s['geo_target_market'] + '</div>' if s.get('geo_target_market') else ''}"
+            f"</div>"
+        )
+
+    gaps_block = ""
+    if gaps:
+        gap_items = "".join(
+            f"<tr><td style='padding:10px 12px;border-bottom:1px solid #FEE2E2;font-size:15px;color:#DC2626'>&#9656; {g}</td></tr>"
+            for g in gaps
+        )
+        gaps_block = (
+            f"<div style='margin-bottom:28px'>"
+            f"<div style='font-size:13px;font-weight:700;color:#1A2B4A;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px'>GEO Gaps to fix</div>"
+            f"<table width='100%' cellpadding='0' cellspacing='0' style='background:#FFF5F5;border-radius:8px;overflow:hidden'>{gap_items}</table>"
+            f"</div>"
+        )
+
+    stack_rows = "".join(filter(None, [
+        row("Email", s.get("email_provider")),
+        row("DNS host", s.get("dns_host")),
+        row("CDN", ", ".join(s.get("cdn") or [])),
+        row("Hosting", ", ".join(s.get("hosting") or [])),
+        row("CMS", ", ".join(s.get("cms") or [])),
+        row("CRM", ", ".join(s.get("crm") or [])),
+        row("Marketing", ", ".join(s.get("marketing_tools") or [])),
+    ]))
+
     wiki = s.get("wikipedia_url")
-    wiki_html = f'<a href="{wiki}" style="color:#0891B2">Wikipedia page found</a>' if wiki else "No Wikipedia page"
-    bot_rows = "".join(
-        f"<tr><td style='padding:4px 0;font-size:12px;color:#374151'>{bot}</td>"
-        f"<td style='font-size:12px;font-weight:700;color:{'#16A34A' if ok else '#DC2626'}'>&nbsp;{'&#10003; Allowed' if ok else '&#10007; Blocked'}</td></tr>"
-        for bot, ok in [
-            ("GPTBot (ChatGPT)", s.get("robots_txt_allows_gptbot")),
-            ("ClaudeBot (Anthropic)", s.get("robots_txt_allows_claudebot")),
-            ("PerplexityBot", s.get("robots_txt_allows_perplexity")),
-            ("Google-Extended", s.get("robots_txt_allows_google_extended")),
-        ] if ok is not None
-    )
+    wiki_val = f'<a href="{wiki}" style="color:#0891B2;text-decoration:none">&#10003; Wikipedia page found</a>' if wiki else "&#10007; No Wikipedia page"
+    wiki_color = "#16A34A" if wiki else "#DC2626"
+
+    bot_badges = "".join(filter(None, [
+        badge("GPTBot (ChatGPT)", s.get("robots_txt_allows_gptbot")) if s.get("robots_txt_allows_gptbot") is not None else "",
+        badge("ClaudeBot (Anthropic)", s.get("robots_txt_allows_claudebot")) if s.get("robots_txt_allows_claudebot") is not None else "",
+        badge("PerplexityBot", s.get("robots_txt_allows_perplexity")) if s.get("robots_txt_allows_perplexity") is not None else "",
+        badge("Google-Extended", s.get("robots_txt_allows_google_extended")) if s.get("robots_txt_allows_google_extended") is not None else "",
+    ]))
     llms_color = "#16A34A" if s.get("llms_txt_found") else "#DC2626"
-    llms_label = "&#10003; Found" if s.get("llms_txt_found") else "&#10007; Not found"
-    score_block = "" if score is None else (
-        f"<div style='display:inline-block;background:{sc}18;border:1px solid {sc}40;"
-        f"border-radius:8px;padding:12px 20px;margin-bottom:20px'>"
-        f"<span style='font-size:36px;font-weight:800;color:{sc}'>{score}</span>"
-        f"<span style='font-size:13px;color:#6B7280;margin-left:6px'>/ 100 AI readiness</span></div>"
-    )
-    positioning = (
-        f"<p style='font-size:14px;color:#374151;margin-bottom:20px'>"
-        f"<strong>Positioning:</strong> {s['geo_positioning']}</p>"
-    ) if s.get("geo_positioning") else ""
+    llms_mark = "&#10003;" if s.get("llms_txt_found") else "&#10007;"
+
+    def section(title):
+        return f"<div style='font-size:13px;font-weight:700;color:#1A2B4A;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;margin-top:28px'>{title}</div>"
 
     return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Domain scan: {domain}</title></head>
-<body style="margin:0;padding:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-<div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden">
-  <div style="background:#1A2B4A;padding:24px;border-bottom:3px solid #00B4A0">
-    <p style="color:#00B4A0;margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">Domain Scan Report</p>
-    <h1 style="color:#fff;margin:6px 0 0;font-size:22px;font-weight:800">{domain}</h1>
-  </div>
-  <div style="padding:24px">
-    {score_block}{positioning}
-    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">GEO gaps</h2>
-    <ul style="font-size:13px;color:#DC2626;padding-left:18px;margin-bottom:20px">{gaps_html}</ul>
-    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">Tech stack</h2>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">{stack_rows}</table>
-    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">Knowledge graph</h2>
-    <p style="font-size:13px;margin-bottom:20px">{wiki_html}</p>
-    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">AI crawler access</h2>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">{bot_rows}
-      <tr><td style="padding:4px 0;font-size:12px;color:#374151">llms.txt</td>
-          <td style="font-size:12px;font-weight:700;color:{llms_color}">&nbsp;{llms_label}</td></tr>
+<body style="margin:0;padding:16px;background:#F1F5F9;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;max-width:600px">
+  <tr><td style="background:#1A2B4A;padding:28px 32px;border-bottom:4px solid #00B4A0">
+    <div style="font-size:12px;font-weight:700;color:#00B4A0;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Domain Scan Report</div>
+    <div style="font-size:28px;font-weight:800;color:#ffffff">{domain}</div>
+  </td></tr>
+  <tr><td style="padding:32px">
+    {score_block}{positioning_block}{gaps_block}
+    {section("Tech Stack")}
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;border:1px solid #E5E7EB">{stack_rows}</table>
+    {section("Knowledge Graph")}
+    <div style="font-size:15px;font-weight:600;color:{wiki_color};margin-bottom:20px">{wiki_val}</div>
+    {section("AI Crawler Access")}
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;border:1px solid #E5E7EB">
+      {bot_badges}
+      <tr><td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280;font-size:15px;width:200px">llms.txt</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:15px;font-weight:700;color:{llms_color}">{llms_mark} {"Found" if s.get("llms_txt_found") else "Not found"}</td></tr>
     </table>
-  </div>
-  <div style="background:#F8FAFC;padding:16px 24px;border-top:1px solid #E5E7EB;font-size:11px;color:#9CA3AF;line-height:1.6">
-    You requested this report via Domain Stack Scanner. Your email was used solely to deliver this report.<br>
-    To request deletion of your data, reply to this email with "delete my data".<br>
-    Data controller: Domain Stack Scanner &nbsp;&middot;&nbsp; Legal basis: Art. 6(1)(a) GDPR &nbsp;&middot;&nbsp;
-    Belgian DPA: <a href="https://www.dataprotectionauthority.be" style="color:#9CA3AF">dataprotectionauthority.be</a>
-  </div>
-</div>
+  </td></tr>
+  <tr><td style="background:#F8FAFC;padding:20px 32px;border-top:1px solid #E5E7EB">
+    <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.8">
+      You requested this report via Domain Stack Scanner. Your email was used solely to deliver this report.<br>
+      To request deletion of your data, reply to this email with "delete my data".<br>
+      <strong style="color:#6B7280">Data controller:</strong> Domain Stack Scanner &nbsp;&middot;&nbsp;
+      <strong style="color:#6B7280">Legal basis:</strong> Art. 6(1)(a) GDPR &nbsp;&middot;&nbsp;
+      <a href="https://www.dataprotectionauthority.be" style="color:#9CA3AF">Belgian DPA</a>
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
 </body></html>"""
 
 
