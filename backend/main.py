@@ -27,8 +27,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+_supabase_url = os.getenv("SUPABASE_URL") or ""
+_supabase_key = os.getenv("SUPABASE_KEY") or ""
+_mistral_key  = os.getenv("MISTRAL_API_KEY") or ""
+
+supabase = create_client(_supabase_url, _supabase_key) if _supabase_url and _supabase_key else None
+mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "SUPABASE_URL":     "set" if _supabase_url else "MISSING",
+        "SUPABASE_KEY":     "set" if _supabase_key else "MISSING",
+        "MISTRAL_API_KEY":  "set" if _mistral_key  else "MISSING",
+    }
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
 
@@ -534,6 +547,9 @@ Return a JSON object with exactly these keys:
 - ai_readiness_score: integer 0-100 (100 = fully AI-crawler-ready: has llms.txt, allows all bots, rich schema.org, Wikipedia presence, clear positioning)
 - geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "No Wikipedia page", "Schema.org completeness only 15/100", "No schema.org markup")"""
 
+    if not mistral_client:
+        return {"positioning": None, "target_market": None, "tone_of_voice": None,
+                "ai_readiness_score": None, "geo_gaps": [], "raw": None}
     try:
         response = mistral_client.chat.complete(
             model="mistral-small-latest",
@@ -691,14 +707,15 @@ async def scan(request: Request, body: ScanRequest):
     )
 
     stack_delta = {}
-    try:
-        prev = supabase.table("scans").select(
-            "cms,crm,marketing_tools,internal_tools,verified_vendors,cdn,hosting"
-        ).eq("domain", raw_domain).eq("is_latest", True).limit(1).execute()
-        if prev.data:
-            stack_delta = compute_stack_delta(stack, prev.data[0])
-    except Exception:
-        pass
+    if supabase:
+        try:
+            prev = supabase.table("scans").select(
+                "cms,crm,marketing_tools,internal_tools,verified_vendors,cdn,hosting"
+            ).eq("domain", raw_domain).eq("is_latest", True).limit(1).execute()
+            if prev.data:
+                stack_delta = compute_stack_delta(stack, prev.data[0])
+        except Exception:
+            pass
 
     # ── 7. GEO synthesis ──────────────────────────────────────────────────────
     geo = geo_synthesis(raw_domain, homepage, llms_txt_content, stack, wikipedia, schema_completeness, stack_delta)
@@ -767,12 +784,13 @@ async def scan(request: Request, body: ScanRequest):
     }
 
     scan_id = None
-    try:
-        supabase.table("scans").update({"is_latest": False}).eq("domain", raw_domain).eq("is_latest", True).execute()
-        result = supabase.table("scans").insert(scan_row).execute()
-        scan_id = result.data[0]["id"] if result.data else None
-    except Exception as e:
-        print(f"[supabase] scan write failed: {e}")
+    if supabase:
+        try:
+            supabase.table("scans").update({"is_latest": False}).eq("domain", raw_domain).eq("is_latest", True).execute()
+            result = supabase.table("scans").insert(scan_row).execute()
+            scan_id = result.data[0]["id"] if result.data else None
+        except Exception as e:
+            print(f"[supabase] scan write failed: {e}")
 
     # ── 9. Write lead if email provided ───────────────────────────────────────
     if body.email and scan_id:
