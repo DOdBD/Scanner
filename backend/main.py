@@ -30,8 +30,8 @@ app.add_middleware(
 _supabase_url  = os.getenv("SUPABASE_URL") or ""
 _supabase_key  = os.getenv("SUPABASE_KEY") or ""
 _mistral_key   = os.getenv("MISTRAL_API_KEY") or ""
-_resend_key    = os.getenv("RESEND_API_KEY") or ""
-_resend_from   = os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
+_brevo_key     = os.getenv("BREVO_API_KEY") or ""
+_brevo_from    = os.getenv("BREVO_FROM_EMAIL") or ""
 
 supabase = create_client(_supabase_url, _supabase_key) if _supabase_url and _supabase_key else None
 mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
@@ -40,9 +40,10 @@ mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
 def health():
     return {
         "status": "ok",
-        "SUPABASE_URL":     "set" if _supabase_url else "MISSING",
-        "SUPABASE_KEY":     "set" if _supabase_key else "MISSING",
-        "MISTRAL_API_KEY":  "set" if _mistral_key  else "MISSING",
+        "SUPABASE_URL":    "set" if _supabase_url else "MISSING",
+        "SUPABASE_KEY":    "set" if _supabase_key else "MISSING",
+        "MISTRAL_API_KEY": "set" if _mistral_key  else "MISSING",
+        "BREVO_API_KEY":   "set" if _brevo_key    else "MISSING",
     }
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
@@ -966,7 +967,7 @@ class SendReportRequest(BaseModel):
 async def send_report_endpoint(body: SendReportRequest):
     if not body.consent:
         return {"ok": False, "error": "Consent is required."}
-    if not _resend_key:
+    if not _brevo_key or not _brevo_from:
         return {"ok": False, "error": "Email sending is not configured on this server."}
     if not supabase:
         return {"ok": False, "error": "Database not configured."}
@@ -980,13 +981,13 @@ async def send_report_endpoint(body: SendReportRequest):
 
     async with httpx.AsyncClient() as client:
         r = await client.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {_resend_key}", "Content-Type": "application/json"},
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": _brevo_key, "Content-Type": "application/json"},
             json={
-                "from": _resend_from,
-                "to": [body.email],
+                "sender": {"name": "Domain Stack Scanner", "email": _brevo_from},
+                "to": [{"email": body.email}],
                 "subject": f"Your domain scan report: {scan.get('domain', '')}",
-                "html": html,
+                "htmlContent": html,
             },
             timeout=15,
         )
