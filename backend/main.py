@@ -570,6 +570,7 @@ Return a JSON object with exactly these keys:
         parsed["raw"] = raw
         return parsed
     except Exception as e:
+        print(f"[geo_synthesis] ERROR: {e}")
         return {
             "positioning": None, "target_market": None,
             "tone_of_voice": None, "ai_readiness_score": None,
