@@ -97,7 +97,11 @@
 
 <script>
 /* ─── Config ─────────────────────────────────────────────────────────────── */
-const API_URL = 'http://localhost:8000';
+const API_URL = (() => {
+  const h = window.location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+  return 'https://REPLACE_WITH_RAILWAY_URL';
+})();
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const uniq = a => [...new Set(a)];
