@@ -14,9 +14,11 @@
   .live { background: #00B4A0; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
   .sub { color: #94A3B8; font-size: 12px; }
   .container { max-width: 760px; margin: 0 auto; padding: 22px 16px; }
-  .inputrow { display: flex; gap: 8px; margin-bottom: 18px; }
+  .inputrow { display: flex; gap: 8px; margin-bottom: 8px; }
+  .emailrow { display: flex; gap: 8px; margin-bottom: 18px; }
   input { flex: 1; padding: 12px 14px; font-size: 15px; border: 2px solid #E5E7EB; border-radius: 8px; outline: none; }
   input:focus { border-color: #00B4A0; }
+  input.small { font-size: 13px; padding: 10px 14px; }
   button { background: #00B4A0; color: #fff; border: none; border-radius: 8px; padding: 12px 18px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   button:disabled { background: #94A3B8; }
   .stage { font-size: 13px; color: #00B4A0; font-weight: 600; margin-bottom: 14px; }
@@ -35,22 +37,26 @@
   .empty { color: #9CA3AF; font-size: 13px; }
   .tag { display: inline-flex; align-items: center; border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 600; margin: 3px 3px; }
   .mono { font-family: monospace; font-size: 11px; color: #374151; }
-  .subwrap { display: flex; flex-wrap: wrap; max-height: 160px; overflow-y: auto; }
-  .subchip { font-size: 11px; color: #374151; background: #F3F4F6; border-radius: 4px; padding: 2px 7px; margin: 2px 2px; font-family: monospace; }
-  details { margin-bottom: 10px; }
-  summary { cursor: pointer; font-size: 13px; color: #6B7280; padding: 8px 0; }
-  .raw { background: #1E293B; border-radius: 8px; padding: 14px; margin-top: 6px; }
-  .raw-label { color: #00B4A0; font-size: 11px; font-weight: 700; margin-bottom: 6px; }
-  .raw-line { font-family: monospace; font-size: 11px; color: #94A3B8; margin-bottom: 4px; word-break: break-all; }
   .spf-box { font-family: monospace; font-size: 11px; color: #6B7280; background: #F9FAFB; padding: 8px 10px; border-radius: 6px; word-break: break-all; }
   .empty-state { text-align: center; padding: 40px 0; color: #9CA3AF; }
   .empty-state .big { font-size: 46px; margin-bottom: 10px; }
+  .score-block { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .score-num { font-size: 42px; font-weight: 800; line-height: 1; }
+  .score-label { font-size: 11px; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .score-meta { font-size: 13px; color: #374151; margin-top: 2px; }
+  .bot-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #F3F4F6; font-size: 13px; }
+  .bot-row:last-child { border-bottom: none; }
+  .bot-name { color: #374151; font-weight: 500; }
+  .bot-status-ok { color: #16A34A; font-weight: 700; font-size: 12px; }
+  .bot-status-no { color: #DC2626; font-weight: 700; font-size: 12px; }
+  .meta-row { display: flex; gap: 6px; margin-bottom: 7px; font-size: 13px; }
+  .meta-key { color: #9CA3AF; font-weight: 600; min-width: 120px; flex-shrink: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .meta-val { color: #1A2B4A; word-break: break-word; }
   .report-meta { display: none; }
   @media print {
     body { background: #fff; }
     .header { background: #1A2B4A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .inputrow, #stage, #emptyState { display: none !important; }
-    details summary { display: none; }
+    .inputrow, .emailrow, #stage, #emptyState { display: none !important; }
     .live { display: none; }
     .report-meta { display: block; font-size: 11px; color: #6B7280; margin-bottom: 14px; }
     .card, .summary, .grid2 > div { break-inside: avoid; page-break-inside: avoid; }
@@ -67,7 +73,7 @@
     <span class="title">Domain Stack Scanner</span>
     <span class="live">LIVE</span>
   </div>
-  <div class="sub">DNS, MX, TXT, SPF, NS, CAA, IP, SSL subdomains, HTTP headers. Fresh lookup every run.</div>
+  <div class="sub">DNS · MX · TXT · SPF · DMARC · HTTP headers · GEO analysis · AI crawler access. Server-side, no CORS limits.</div>
 </div></div>
 
 <div class="container">
@@ -76,197 +82,25 @@
     <button id="scanBtn">Scan</button>
     <button id="exportBtn" title="Export as PDF" style="display:none;background:#1A2B4A;padding:12px 14px">⬇ PDF</button>
   </div>
+  <div class="emailrow">
+    <input id="emailInput" class="small" type="email" placeholder="email (optional — stored as lead)" autocapitalize="off" autocorrect="off" spellcheck="false">
+  </div>
   <div id="stage" class="stage" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
   <div id="results"></div>
   <div id="emptyState" class="empty-state">
     <div class="big">🔬</div>
-    <p style="font-size:14px">Enter any domain to see their full tech stack from public data.</p>
-    <p style="font-size:12px;color:#CBD5E1;margin-top:6px">Try: clay.com, hubspot.com, ionbiz.com</p>
+    <p style="font-size:14px">Enter any domain to see their full tech stack and AI presence.</p>
+    <p style="font-size:12px;color:#CBD5E1;margin-top:6px">Try: clay.com, hubspot.com, stripe.com</p>
   </div>
 </div>
 
 <script>
-/* ---------------- Fingerprints ---------------- */
-const EMAIL_MX = {
-  "google.com":"Google Workspace","googlemail.com":"Google Workspace","aspmx.l.google.com":"Google Workspace",
-  "outlook.com":"Microsoft 365","protection.outlook.com":"Microsoft 365","mail.protection.outlook.com":"Microsoft 365",
-  "zoho.com":"Zoho Mail","zoho.eu":"Zoho Mail","mailgun.org":"Mailgun","sendgrid.net":"SendGrid",
-  "amazonses.com":"Amazon SES","mimecast.com":"Mimecast (security gateway)","pphosted.com":"Proofpoint (security gateway)",
-  "proofpoint.com":"Proofpoint (security gateway)","barracuda":"Barracuda (security gateway)",
-  "messagelabs.com":"Symantec MessageLabs","yandex":"Yandex Mail","fastmail":"Fastmail","ovh.net":"OVH Mail"
-};
-const TXT_FP = {
-  "google-site-verification":["Google Search Console","tools"],"facebook-domain-verification":["Meta / Facebook Ads","marketing"],
-  "ms=":["Microsoft 365","tools"],"atlassian-domain-verification":["Atlassian (Jira/Confluence)","tools"],
-  "atlassian-sending-domain":["Atlassian","tools"],"docusign":["DocuSign","tools"],
-  "adobe-idp-site-verification":["Adobe","tools"],"adobe-sign-verification":["Adobe Sign","tools"],
-  "stripe-verification":["Stripe","tools"],"dropbox-domain-verification":["Dropbox","tools"],
-  "notion":["Notion","tools"],"slack-domain-verification":["Slack","tools"],"miro-verification":["Miro","tools"],
-  "zoom":["Zoom","tools"],"calendly":["Calendly","tools"],"github":["GitHub","tools"],"gitlab":["GitLab","tools"],
-  "1password":["1Password","tools"],"okta-verification":["Okta","tools"],"okta":["Okta","tools"],"auth0":["Auth0","tools"],
-  "onelogin":["OneLogin","tools"],"duosecurity":["Duo Security","tools"],"segment":["Segment","tools"],
-  "datadog":["Datadog","tools"],"pagerduty":["PagerDuty","tools"],"twilio":["Twilio","tools"],"sendgrid":["SendGrid","tools"],
-  "mailchimp":["Mailchimp","marketing"],"mandrill":["Mailchimp Transactional","marketing"],"klaviyo":["Klaviyo","marketing"],
-  "hubspot":["HubSpot","crm"],"_hubspot":["HubSpot","crm"],"pardot":["Salesforce Pardot","crm"],"salesforce":["Salesforce","crm"],
-  "marketo":["Marketo","crm"],"intercom":["Intercom","crm"],"zendesk":["Zendesk","crm"],"freshdesk":["Freshdesk","crm"],
-  "freshworks":["Freshworks","crm"],"pipedrive":["Pipedrive","crm"],"drift":["Drift","crm"],"amazonses":["Amazon SES","tools"],
-  "cloudflare":["Cloudflare","tools"],"shopify":["Shopify","cms"],"webflow":["Webflow","cms"],"wix":["Wix","cms"],
-  "squarespace":["Squarespace","cms"],"knowbe4":["KnowBe4 (security training)","tools"],"logmein":["LogMeIn / GoTo","tools"],
-  "citrix":["Citrix","tools"],"workday":["Workday","tools"],"servicenow":["ServiceNow","tools"],
-  "qualtrics":["Qualtrics","marketing"],"surveymonkey":["SurveyMonkey","marketing"]
-};
-const NS_HOSTS = {
-  "awsdns":"AWS Route 53","cloudflare":"Cloudflare","googledomains":"Google Domains","google.com":"Google Cloud DNS",
-  "azure-dns":"Azure DNS","digitalocean":"DigitalOcean DNS","netlify":"Netlify DNS","vercel-dns":"Vercel DNS",
-  "nsone.net":"NS1","dnsimple":"DNSimple","gandi.net":"Gandi","ovh.net":"OVH","domaincontrol.com":"GoDaddy",
-  "registrar-servers.com":"Namecheap","name-services.com":"Enom","ultradns":"UltraDNS (Vercara)",
-  "akam.net":"Akamai (Edge DNS)","dynect.net":"Oracle Dyn",
-  "combell":"Combell","hostbasket":"Hostbasket","one.com":"One.com","transip":"TransIP",
-  "openprovider":"Openprovider","kinamo":"Kinamo","nucleus":"Nucleus","versio":"Versio",
-  "antagonist":"Antagonist","cloudns":"ClouDNS","hostnet":"Hostnet","mijndomein":"Mijndomein",
-  "infomaniak":"Infomaniak","scaleway":"Scaleway","hetzner":"Hetzner"
-};
+/* ─── Config ─────────────────────────────────────────────────────────────── */
+const API_URL = 'http://localhost:8000';
 
-// Domain verification fingerprints — surfaced as their own card (high GTM value)
-const VERIFY_FP = {
-  "openai-domain-verification":"OpenAI (ChatGPT)",
-  "anthropic-domain-verification":"Anthropic (Claude)",
-  "apple-domain-verification":"Apple Business",
-  "google-site-verification":"Google Search Console",
-  "facebook-domain-verification":"Meta Business",
-  "atlassian-domain-verification":"Atlassian",
-  "dropbox-domain-verification":"Dropbox",
-  "stripe-verification":"Stripe",
-  "zoom-domain-verification":"Zoom",
-  "slack-domain-verification":"Slack",
-  "miro-verification":"Miro",
-  "canva-domain-verification":"Canva",
-  "figma":"Figma",
-  "calendly":"Calendly"
-};
-const HEADER_FP = [
-  {h:"server",m:"cloudflare",l:"Cloudflare",c:"cdn"},{h:"server",m:"nginx",l:"Nginx",c:"server"},
-  {h:"server",m:"apache",l:"Apache",c:"server"},{h:"server",m:"microsoft-iis",l:"Microsoft IIS",c:"server"},
-  {h:"server",m:"openresty",l:"OpenResty",c:"server"},{h:"server",m:"vercel",l:"Vercel",c:"hosting"},
-  {h:"server",m:"awselb",l:"AWS ELB",c:"hosting"},{h:"server",m:"gunicorn",l:"Gunicorn (Python)",c:"server"},
-  {h:"x-powered-by",m:"express",l:"Express (Node.js)",c:"server"},{h:"x-powered-by",m:"php",l:"PHP",c:"server"},
-  {h:"x-powered-by",m:"asp.net",l:"ASP.NET",c:"server"},{h:"x-powered-by",m:"next.js",l:"Next.js",c:"cms"},
-  {h:"x-powered-by",m:"shopify",l:"Shopify",c:"cms"},{h:"x-powered-by",m:"wp engine",l:"WP Engine",c:"hosting"},
-  {h:"via",m:"cloudfront",l:"AWS CloudFront",c:"cdn"},{h:"via",m:"varnish",l:"Varnish / Fastly",c:"cdn"},
-  {h:"x-served-by",m:"cache",l:"Fastly",c:"cdn"},{h:"x-cache",m:"cloudfront",l:"AWS CloudFront",c:"cdn"},
-  {h:"x-vercel-id",m:"",l:"Vercel",c:"hosting"},{h:"x-nf-request-id",m:"",l:"Netlify",c:"hosting"},
-  {h:"x-github-request-id",m:"",l:"GitHub Pages",c:"hosting"},{h:"x-amz-cf-id",m:"",l:"AWS CloudFront",c:"cdn"},
-  {h:"x-shopify-stage",m:"",l:"Shopify",c:"cms"},{h:"x-drupal-cache",m:"",l:"Drupal",c:"cms"},
-  {h:"x-generator",m:"drupal",l:"Drupal",c:"cms"},{h:"x-generator",m:"wordpress",l:"WordPress",c:"cms"},
-  {h:"x-wix-request-id",m:"",l:"Wix",c:"cms"},{h:"x-hubspot",m:"",l:"HubSpot CMS",c:"cms"},
-  {h:"cf-ray",m:"",l:"Cloudflare",c:"cdn"},{h:"fly-request-id",m:"",l:"Fly.io",c:"hosting"}
-];
-const SEC_HEADERS = [
-  {h:"strict-transport-security",l:"HSTS"},{h:"content-security-policy",l:"CSP"},
-  {h:"x-frame-options",l:"X-Frame-Options"},{h:"x-content-type-options",l:"X-Content-Type-Options"},
-  {h:"referrer-policy",l:"Referrer-Policy"},{h:"permissions-policy",l:"Permissions-Policy"}
-];
-const SPF_MAP = {
-  "_spf.google.com":"Google Workspace","spf.protection.outlook.com":"Microsoft 365","sendgrid.net":"SendGrid",
-  "mailgun.org":"Mailgun","amazonses.com":"Amazon SES","_spf.salesforce.com":"Salesforce","spf.mandrillapp.com":"Mailchimp",
-  "servers.mcsv.net":"Mailchimp","mail.zendesk.com":"Zendesk","_spf.intercom.io":"Intercom","spf.hubspotemail.net":"HubSpot",
-  "_spf.qualtrics.com":"Qualtrics","spf.mtasv.net":"Postmark","_spf.pardot.com":"Salesforce Pardot",
-  "stspg-customer.com":"Statuspage","_spf.createsend.com":"Campaign Monitor","sparkpostmail.com":"SparkPost",
-  "billit":"Billit (invoicing)","teamleader":"Teamleader","exact.com":"Exact","yuki":"Yuki",
-  "mailjet.com":"Mailjet","sendinblue":"Brevo (Sendinblue)","brevo.com":"Brevo","spf.flockmail":"Flock",
-  "mailprotect.be":"Combell Mailprotect","antispamcloud":"SpamExperts","mailcontrol.com":"Forcepoint",
-  "ppe-hosted.com":"Proofpoint","_spf.freshemail.io":"Freshworks","mailgun":"Mailgun",
-  "klaviyomail.com":"Klaviyo","cmail":"Campaign Monitor","amazonses":"Amazon SES"
-};
-
-/* ---------------- Helpers ---------------- */
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
 const uniq = a => [...new Set(a)];
-function push(arr,v){ if(v && !arr.includes(v)) arr.push(v); }
-
-async function dns(name,type){
-  try{
-    const r = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`);
-    const d = await r.json();
-    return (d.Answer||[]).map(x=>x.data||"").filter(Boolean);
-  }catch(e){ return []; }
-}
-async function getSubdomains(d){
-  const urls = [
-    `https://crt.sh/?q=%25.${encodeURIComponent(d)}&output=json`,
-    `https://crt.sh/?q=${encodeURIComponent(d)}&output=json`
-  ];
-  for(const url of urls){
-    try{
-      const r = await fetch(url);
-      if(!r.ok) continue;
-      const data = await r.json();
-      const set = new Set();
-      data.forEach(c=>{
-        (c.name_value||"").split("\n").forEach(n=>{
-          const clean = n.trim().replace(/^\*\./,"").toLowerCase();
-          if(clean && clean!==d && clean.endsWith("."+d)) set.add(clean);
-        });
-      });
-      if(set.size) return [...set].sort();
-    }catch(e){ /* try next */ }
-  }
-  return [];
-}
-async function getHeaders(d){
-  const det = {cdn:[],server:[],hosting:[],cms:[],security:[],raw:{}};
-  try{
-    const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent("https://"+d)}`);
-    const h = {};
-    r.headers.forEach((v,k)=>{ h[k.toLowerCase()]=v; });
-    det.raw = h;
-    HEADER_FP.forEach(fp=>{
-      const val = h[fp.h];
-      if(val!==undefined && (fp.m==="" || val.toLowerCase().includes(fp.m))) push(det[fp.c],fp.l);
-    });
-    SEC_HEADERS.forEach(s=>{ if(h[s.h]!==undefined) push(det.security,s.l); });
-    return {det,ok:true};
-  }catch(e){ return {det,ok:false}; }
-}
-function parseTxt(txt){
-  const out={crm:[],marketing:[],tools:[],cms:[]}; let spf=null,hasDmarc=false,dmarcPolicy=null;
-  txt.forEach(raw=>{
-    const rec = raw.replace(/"/g,""); const low = rec.toLowerCase();
-    if(low.startsWith("v=dmarc1")){ hasDmarc=true; const m=rec.match(/p=(\w+)/i); dmarcPolicy=m?m[1]:"none"; return; }
-    if(low.startsWith("v=spf1")){ spf=rec; for(const k in TXT_FP){ if(low.includes(k)){const[l,c]=TXT_FP[k]; push(out[c]||out.tools,l);} } return; }
-    for(const k in TXT_FP){ if(low.includes(k)){const[l,c]=TXT_FP[k]; push(out[c]||out.tools,l);} }
-  });
-  return {...out,spf,hasDmarc,dmarcPolicy};
-}
-function parseSpf(spf){
-  if(!spf) return {senders:[],includes:[]};
-  const includes = [...spf.matchAll(/include:([^\s]+)/gi)].map(m=>m[1]);
-  const senders=[];
-  includes.forEach(inc=>{ for(const k in SPF_MAP){ if(inc.includes(k)) push(senders,SPF_MAP[k]); } });
-  return {senders,includes};
-}
-function parseVerifications(txt){
-  const out=[];
-  txt.forEach(raw=>{
-    const low = raw.replace(/"/g,"").toLowerCase();
-    if(low.startsWith("v=spf1")||low.startsWith("v=dmarc1")) return;
-    for(const k in VERIFY_FP){ if(low.includes(k)) push(out,VERIFY_FP[k]); }
-  });
-  return out;
-}
-const IP_HOSTS = [
-  {p:"199.60.103.",l:"Squarespace"},{p:"185.230.6",l:"Wix"},{p:"104.16.",l:"Cloudflare"},
-  {p:"104.17.",l:"Cloudflare"},{p:"104.18.",l:"Cloudflare"},{p:"104.19.",l:"Cloudflare"},
-  {p:"172.67.",l:"Cloudflare"},{p:"13.",l:"AWS"},{p:"52.",l:"AWS"},{p:"54.",l:"AWS"},
-  {p:"3.",l:"AWS"},{p:"34.",l:"Google Cloud"},{p:"35.",l:"Google Cloud"},
-  {p:"20.",l:"Azure"},{p:"40.",l:"Azure"},{p:"76.76.21.",l:"Vercel"},{p:"75.2.",l:"Netlify"},
-  {p:"99.83.",l:"AWS Global Accelerator"},{p:"151.101.",l:"Fastly"},{p:"146.75.",l:"Fastly"}
-];
-function hostFromIp(ips){
-  const out=[];
-  ips.forEach(ip=>{ for(const e of IP_HOSTS){ if(ip.startsWith(e.p)){ push(out,e.l); break; } } });
-  return out;
-}
 function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 function tag(label,color){ return `<span class="tag" style="background:${color}18;color:${color};border:1px solid ${color}40">${esc(label)}</span>`; }
 function secBadge(hasDmarc,pol){
@@ -276,161 +110,235 @@ function secBadge(hasDmarc,pol){
   return `<span class="pill" style="background:${bg};color:${fg}">DMARC: ${esc(pol)}</span>`;
 }
 function card(icon,title,inner,hint){
-  const h = hint?`<span class="card-hint">${esc(hint)}</span>`:"";
+  const h=hint?`<span class="card-hint">${esc(hint)}</span>`:"";
   return `<div class="card"><div class="card-head"><span class="card-icon">${icon}</span><span class="card-title">${title}</span>${h}</div>${inner}</div>`;
 }
-function emptyOr(arr,html){ return arr.length? html : `<span class="empty">Nothing detected</span>`; }
+function emptyOr(arr,html){ return arr.length ? html : `<span class="empty">Nothing detected</span>`; }
 
-/* ---------------- Scan ---------------- */
+const SEC_HEADER_LABELS = {
+  'strict-transport-security':'HSTS','content-security-policy':'CSP',
+  'x-frame-options':'X-Frame-Options','x-content-type-options':'X-Content-Type-Options',
+  'referrer-policy':'Referrer-Policy','permissions-policy':'Permissions-Policy'
+};
+
+function scoreColor(n){
+  if(n==null) return '#9CA3AF';
+  if(n>=80) return '#16A34A';
+  if(n>=50) return '#D97706';
+  return '#DC2626';
+}
+
+function botRow(label,allowed){
+  if(allowed==null) return '';
+  const cls=allowed?'bot-status-ok':'bot-status-no';
+  const txt=allowed?'✓ Allowed':'✗ Blocked';
+  return `<div class="bot-row"><span class="bot-name">${esc(label)}</span><span class="${cls}">${txt}</span></div>`;
+}
+
+/* ─── Scan ───────────────────────────────────────────────────────────────── */
 const el = id => document.getElementById(id);
-async function scan(){
-  el("error").style.display="none"; el("results").innerHTML=""; el("emptyState").style.display="none";
-  let d = el("domainInput").value.trim().toLowerCase().replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0];
-  if(!d || !d.includes(".")){ el("error").textContent="Enter a valid domain like clay.com"; el("error").style.display="block"; el("emptyState").style.display="block"; return; }
 
+async function scan(){
+  el("error").style.display="none";
+  el("results").innerHTML="";
+  el("emptyState").style.display="none";
+
+  let d = el("domainInput").value.trim().toLowerCase()
+    .replace(/^https?:\/\//,"").replace(/^www\./,"").split("/")[0];
+  if(!d || !d.includes(".")){
+    el("error").textContent="Enter a valid domain like clay.com";
+    el("error").style.display="block";
+    el("emptyState").style.display="block";
+    return;
+  }
+
+  const email = el("emailInput").value.trim() || null;
   const btn=el("scanBtn"); btn.disabled=true; btn.textContent="Scanning...";
   const stage=el("stage"); stage.style.display="block";
+  stage.textContent="Scanning domain via backend...";
+
   try{
-    stage.textContent="Resolving DNS records...";
-    const [mx,txt,ns,a,aaaa,caa] = await Promise.all([dns(d,"MX"),dns(d,"TXT"),dns(d,"NS"),dns(d,"A"),dns(d,"AAAA"),dns(d,"CAA")]);
-    stage.textContent="Reading SSL certificate logs...";
-    const subs = await getSubdomains(d);
-    stage.textContent="Fetching HTTP headers...";
-    const {det:headers,ok:headersOk} = await getHeaders(d);
-
-    let email=null;
-    for(const r of mx){ const low=r.toLowerCase(); for(const k in EMAIL_MX){ if(low.includes(k.trim())){email=EMAIL_MX[k];break;} } if(email)break; }
-    let dnsHost=null;
-    for(const r of ns){ const low=r.toLowerCase(); for(const k in NS_HOSTS){ if(low.includes(k)){dnsHost=NS_HOSTS[k];break;} } if(dnsHost)break; }
-
-    const tp = parseTxt(txt); const spf = parseSpf(tp.spf);
-    const verifications = parseVerifications(txt);
-    const caaIssuers = caa.map(r=>{const m=r.match(/issue\s+"?([^"\s]+)"?/i);return m?m[1]:null;}).filter(Boolean);
-
-    // Hosting fallback from IP when headers are blocked
-    const ipHosts = hostFromIp(a);
-    headers.hosting = uniq([...headers.hosting, ...ipHosts]);
-
-    const r = {
-      domain:d,email,dnsHost,crm:tp.crm,marketing:uniq([...tp.marketing,...spf.senders]),tools:tp.tools,
-      cmsTxt:tp.cms,spf:tp.spf,spfIncludes:spf.includes,verifications,
-      hasDmarc:tp.hasDmarc,dmarcPolicy:tp.dmarcPolicy,subs,
-      ipv4:a,ipv6:aaaa,caaIssuers,headers,headersOk,ipHosts,
-      rawTxt:txt.map(x=>x.replace(/"/g,"")).slice(0,12),
-      scannedAt:new Date().toLocaleTimeString(),
-      scannedFull:new Date().toLocaleString()
-    };
-    window._lastReport = r;
-    render(r);
+    const res = await fetch(`${API_URL}/scan`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({domain: d, email})
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({detail:"Unknown error"}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    data._scannedAt = new Date().toLocaleTimeString();
+    data._scannedFull = new Date().toLocaleString();
+    window._lastReport = data;
+    render(data);
     el("exportBtn").style.display="block";
   }catch(e){
-    console.error(e); el("error").textContent="Scan failed. Check the domain and try again."; el("error").style.display="block";
+    console.error(e);
+    el("error").textContent = `Scan failed: ${e.message}`;
+    el("error").style.display="block";
   }finally{
     btn.disabled=false; btn.textContent="Scan"; stage.style.display="none";
   }
 }
 
+/* ─── Render ─────────────────────────────────────────────────────────────── */
 function render(r){
-  const hosting = uniq([...r.headers.cdn,...r.headers.hosting]);
-  const cms = uniq([...r.headers.cms,...r.cmsTxt]);
+  const hosting = uniq([...(r.cdn||[]), ...(r.hosting||[])]);
+  const secLabels = (r.security_headers||[]).map(h => SEC_HEADER_LABELS[h] || h);
+  const score = r.geo_ai_readiness_score;
+  const sslIssuers = r.ssl_issuer ? [r.ssl_issuer] : [];
 
-  // Count what was found vs not, for the printed report header
-  const found = [];
-  const gaps = [];
-  (r.email?found:gaps).push("Email provider");
-  (r.dnsHost?found:gaps).push("DNS host");
-  (hosting.length?found:gaps).push("CDN/Hosting");
-  (r.verifications.length?found:gaps).push("Verified vendors");
-  (r.crm.length?found:gaps).push("CRM");
-  (r.marketing.length?found:gaps).push("Marketing tools");
-  (r.subs.length?found:gaps).push("Subdomains");
-  (r.hasDmarc?found:gaps).push("DMARC");
+  let html = "";
 
-  let html="";
-
+  // ── Report meta (print only) ─────────────────────────────────────────────
   html += `<div class="report-meta">
-    <strong>Tech stack research report</strong> &nbsp;·&nbsp; ${esc(r.domain)} &nbsp;·&nbsp; ${esc(r.scannedFull)}<br>
-    <strong>Sources:</strong> live DNS (Google DNS-over-HTTPS), SSL certificate transparency (crt.sh), HTTP headers${r.headersOk?"":" (blocked by CORS, hosting inferred from IP)"}.<br>
-    <strong>Found:</strong> ${found.join(", ")||"none"}.<br>
-    <strong>Not detected:</strong> ${gaps.join(", ")||"none"}.
+    <strong>Domain intelligence report</strong> &nbsp;·&nbsp; ${esc(r.domain)} &nbsp;·&nbsp; ${esc(r._scannedFull)}<br>
+    ${r.inferred_country ? `<strong>Country:</strong> ${esc(r.inferred_country)} &nbsp;·&nbsp; ` : ""}
+    <strong>AI readiness score:</strong> ${score != null ? score+"/100" : "N/A"}<br>
+    ${r.geo_positioning ? `<strong>Positioning:</strong> ${esc(r.geo_positioning)}` : ""}
   </div>`;
 
+  // ── Summary bar ──────────────────────────────────────────────────────────
+  const scorePill = score != null
+    ? `<span class="pill" style="background:${scoreColor(score)}18;color:${scoreColor(score)}">AI-ready: ${score}/100</span>`
+    : "";
+  const countryPill = r.inferred_country
+    ? `<span class="pill" style="background:#EEF2FF;color:#4338CA">${esc(r.inferred_country)}</span>`
+    : "";
   html += `<div class="summary">
-    <div><span class="dom">${esc(r.domain)}</span><span class="scanned">scanned ${esc(r.scannedAt)}</span></div>
+    <div><span class="dom">${esc(r.domain)}</span><span class="scanned">scanned ${esc(r._scannedAt)}</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      ${secBadge(r.hasDmarc,r.dmarcPolicy)}
-      <span class="pill" style="background:#EEF2FF;color:#4338CA">${r.subs.length} subdomains</span>
-      <span class="pill" style="background:#F0FDFA;color:#0F766E">${r.headers.security.length}/6 sec headers</span>
+      ${secBadge(r.dmarc_configured, r.dmarc_policy)}
+      ${scorePill}
+      <span class="pill" style="background:#F0FDFA;color:#0F766E">${secLabels.length}/6 sec headers</span>
+      ${countryPill}
     </div></div>`;
 
+  // ── Email provider + DNS host ─────────────────────────────────────────────
   html += `<div class="grid2">
-    ${card("📧","Email provider", emptyOr(r.email?[1]:[], r.email?tag(r.email,"#00B4A0"):""))}
-    ${card("🌐","DNS host", emptyOr(r.dnsHost?[1]:[], r.dnsHost?tag(r.dnsHost,"#1A2B4A"):""))}
+    ${card("📧","Email provider", emptyOr(r.email_provider?[1]:[], r.email_provider?tag(r.email_provider,"#00B4A0"):""))}
+    ${card("🌐","DNS host", emptyOr(r.dns_host?[1]:[], r.dns_host?tag(r.dns_host,"#1A2B4A"):""))}
   </div>`;
 
-  const hint = r.headersOk?undefined:(r.ipHosts.length?"from IP":"headers blocked");
+  // ── CDN & hosting + web server ────────────────────────────────────────────
   html += `<div class="grid2">
-    ${card("☁️","CDN & Hosting", emptyOr(hosting, hosting.map(t=>tag(t,"#0EA5E9")).join("")), hint)}
-    ${card("🖥","Web server", emptyOr(r.headers.server, r.headers.server.map(t=>tag(t,"#64748B")).join("")), r.headersOk?undefined:"headers blocked")}
+    ${card("☁️","CDN & Hosting", emptyOr(hosting, hosting.map(t=>tag(t,"#0EA5E9")).join("")))}
+    ${card("🖥","Web server", emptyOr(r.web_server||[], (r.web_server||[]).map(t=>tag(t,"#64748B")).join("")))}
   </div>`;
 
-  // Domain verifications — high GTM value (shows which SaaS/AI vendors they've set up)
-  html += card("✅","Verified vendors &amp; AI tools", emptyOr(r.verifications, r.verifications.map(t=>{
+  // ── Verified vendors ──────────────────────────────────────────────────────
+  const vendors = r.verified_vendors || [];
+  html += card("✅","Verified vendors &amp; AI tools", emptyOr(vendors, vendors.map(t=>{
     const ai = t.includes("OpenAI")||t.includes("Anthropic");
     return tag(t, ai?"#16A34A":"#0891B2");
   }).join("")), "from domain verification records");
 
-  html += card("📝","CMS / Website platform", emptyOr(cms, cms.map(t=>tag(t,"#DB2777")).join("")));
-  html += card("📊","CRM", emptyOr(r.crm, r.crm.map(t=>tag(t,"#7C3AED")).join("")));
-  html += card("📣","Marketing &amp; email tools", emptyOr(r.marketing, r.marketing.map(t=>tag(t,"#EA580C")).join("")));
-  html += card("🛠","Internal tools", emptyOr(r.tools, r.tools.map(t=>tag(t,"#D97706")).join("")));
+  // ── GEO synthesis ─────────────────────────────────────────────────────────
+  const gaps = r.geo_gaps || [];
+  let geoInner = "";
+  if(score != null){
+    geoInner += `<div class="score-block">
+      <div>
+        <div class="score-num" style="color:${scoreColor(score)}">${score}</div>
+        <div class="score-label">AI readiness / 100</div>
+      </div>
+      <div style="flex:1">
+        ${r.geo_tone_of_voice ? `<span class="pill" style="background:#F3F4F6;color:#374151;margin-right:4px">${esc(r.geo_tone_of_voice)}</span>` : ""}
+        ${gaps.map(g=>tag(g,"#DC2626")).join("")}
+      </div>
+    </div>`;
+  }
+  if(r.geo_positioning){
+    geoInner += `<div class="meta-row"><span class="meta-key">Positioning</span><span class="meta-val">${esc(r.geo_positioning)}</span></div>`;
+  }
+  if(r.geo_target_market){
+    geoInner += `<div class="meta-row"><span class="meta-key">Target market</span><span class="meta-val">${esc(r.geo_target_market)}</span></div>`;
+  }
+  if(!geoInner) geoInner = `<span class="empty">GEO analysis not available</span>`;
+  html += card("🤖","GEO Analysis", geoInner, "Claude synthesis");
 
-  const ipInner = (r.ipv4.length||r.ipv6.length)
-    ? r.ipv4.map(ip=>`<div class="mono">${esc(ip)}</div>`).join("")+r.ipv6.map(ip=>`<div class="mono" style="font-size:10px;color:#9CA3AF">${esc(ip)}</div>`).join("")
+  // ── AI crawler access ─────────────────────────────────────────────────────
+  let crawlerInner = "";
+  if(!r.robots_txt_found){
+    crawlerInner += `<div style="font-size:13px;color:#6B7280;margin-bottom:10px">No robots.txt found — all bots implicitly allowed.</div>`;
+  }
+  crawlerInner += botRow("GPTBot (ChatGPT)", r.robots_txt_allows_gptbot);
+  crawlerInner += botRow("ClaudeBot (Anthropic)", r.robots_txt_allows_claudebot);
+  crawlerInner += botRow("PerplexityBot", r.robots_txt_allows_perplexity);
+  crawlerInner += botRow("Google-Extended", r.robots_txt_allows_google_extended);
+  crawlerInner += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">`;
+  const llmsColor = r.llms_txt_found ? "#16A34A" : "#DC2626";
+  const llmsLabel = r.llms_txt_found ? "✓ llms.txt found" : "✗ No llms.txt";
+  crawlerInner += `<span class="pill" style="background:${llmsColor}18;color:${llmsColor}">${llmsLabel}</span>`;
+  if(r.llms_full_txt_found){
+    crawlerInner += `<span class="pill" style="background:#16A34A18;color:#16A34A">✓ llms-full.txt found</span>`;
+  }
+  const sitemapLabel = r.sitemap_found
+    ? `✓ Sitemap (${r.sitemap_page_count||"?"} URLs)`
+    : "✗ No sitemap";
+  const sitemapColor = r.sitemap_found ? "#0891B2" : "#6B7280";
+  crawlerInner += `<span class="pill" style="background:${sitemapColor}18;color:${sitemapColor}">${sitemapLabel}</span>`;
+  crawlerInner += `</div>`;
+  html += card("🕷️","AI Crawler Access", crawlerInner, "robots.txt + llms.txt");
+
+  // ── CMS / CRM / Marketing / Internal tools ────────────────────────────────
+  html += card("📝","CMS / Website platform", emptyOr(r.cms||[], (r.cms||[]).map(t=>tag(t,"#DB2777")).join("")));
+  html += card("📊","CRM", emptyOr(r.crm||[], (r.crm||[]).map(t=>tag(t,"#7C3AED")).join("")));
+  html += card("📣","Marketing &amp; email tools", emptyOr(r.marketing_tools||[], (r.marketing_tools||[]).map(t=>tag(t,"#EA580C")).join("")));
+  html += card("🛠","Internal tools", emptyOr(r.internal_tools||[], (r.internal_tools||[]).map(t=>tag(t,"#D97706")).join("")));
+
+  // ── IPs + SSL issuer ──────────────────────────────────────────────────────
+  const ipv4 = r.ipv4_addresses || [];
+  const ipv6 = r.ipv6_addresses || [];
+  const ipInner = (ipv4.length||ipv6.length)
+    ? ipv4.map(ip=>`<div class="mono">${esc(ip)}</div>`).join("")
+      + ipv6.map(ip=>`<div class="mono" style="font-size:10px;color:#9CA3AF">${esc(ip)}</div>`).join("")
     : `<span class="empty">Nothing detected</span>`;
   html += `<div class="grid2">
     ${card("📍","IP addresses", ipInner)}
-    ${card("🔐","SSL issuer (CAA)", emptyOr(r.caaIssuers, r.caaIssuers.map(c=>tag(c,"#059669")).join("")))}
+    ${card("🔐","SSL issuer (CAA)", emptyOr(sslIssuers, sslIssuers.map(c=>tag(c,"#059669")).join("")))}
   </div>`;
 
-  let secInner = `<div style="display:flex;gap:6px;flex-wrap:wrap;${r.spf?"margin-bottom:9px":""}">
-    ${secBadge(r.hasDmarc,r.dmarcPolicy)}
-    ${r.spf?`<span class="pill" style="background:#D1FAE5;color:#065F46">SPF configured</span>`:`<span class="pill" style="background:#FEE2E2;color:#DC2626">⚠ No SPF</span>`}
+  // ── Email security ────────────────────────────────────────────────────────
+  const spfOk = r.spf_configured;
+  const senders = r.spf_senders || [];
+  let secInner = `<div style="display:flex;gap:6px;flex-wrap:wrap;${spfOk||senders.length?"margin-bottom:9px":""}">
+    ${secBadge(r.dmarc_configured, r.dmarc_policy)}
+    ${spfOk
+      ? `<span class="pill" style="background:#D1FAE5;color:#065F46">SPF configured</span>`
+      : `<span class="pill" style="background:#FEE2E2;color:#DC2626">⚠ No SPF</span>`}
   </div>`;
-  if(r.spf){
-    secInner += `<div class="spf-box">${esc(r.spf)}</div>`;
-    if(r.spfIncludes.length){
-      secInner += `<div style="margin-top:8px;font-size:11px;color:#6B7280">Senders authorized (${r.spfIncludes.length}):</div>`;
-      secInner += `<div style="margin-top:4px">${r.spfIncludes.map(i=>tag(i,"#475569")).join("")}</div>`;
-    }
+  if(spfOk && senders.length){
+    secInner += `<div style="margin-top:4px;font-size:11px;color:#6B7280;margin-bottom:4px">Authorized senders:</div>`;
+    secInner += senders.map(s=>tag(s,"#475569")).join("");
   }
-  html += card("🛡","Email security", secInner);
-
-  const subInner = r.subs.length
-    ? `<div class="subwrap">${r.subs.slice(0,60).map(s=>`<span class="subchip">${esc(s)}</span>`).join("")}${r.subs.length>60?`<span style="font-size:11px;color:#9CA3AF;padding:2px 7px">+${r.subs.length-60} more</span>`:""}</div>`
-    : `<span class="empty">Nothing detected</span>`;
-  html += card("🗂",`Subdomains (${r.subs.length})`, subInner);
-
-  let rawInner = `<div class="raw"><div class="raw-label">TXT RECORDS</div>`;
-  rawInner += r.rawTxt.map(x=>`<div class="raw-line">${esc(x)}</div>`).join("");
-  if(r.headersOk){
-    rawInner += `<div class="raw-label" style="margin-top:12px">HTTP HEADERS</div>`;
-    rawInner += Object.entries(r.headers.raw).map(([k,v])=>`<div class="raw-line"><span style="color:#CBD5E1">${esc(k)}:</span> ${esc(v)}</div>`).join("");
+  if(secLabels.length){
+    secInner += `<div style="margin-top:10px;font-size:11px;color:#6B7280;margin-bottom:4px">Security headers (${secLabels.length}/6):</div>`;
+    secInner += secLabels.map(l=>tag(l,"#059669")).join("");
   }
-  rawInner += `</div>`;
-  const rawSummary = `Raw data (${r.rawTxt.length} TXT records${r.headersOk?`, ${Object.keys(r.headers.raw).length} headers`:", headers blocked by CORS"})`;
-  html += `<details><summary>${rawSummary}</summary>${rawInner}</details>`;
+  html += card("🛡","Email & web security", secInner);
+
+  // ── Homepage content ──────────────────────────────────────────────────────
+  let pageInner = "";
+  if(r.homepage_title) pageInner += `<div class="meta-row"><span class="meta-key">Title</span><span class="meta-val">${esc(r.homepage_title)}</span></div>`;
+  if(r.homepage_description) pageInner += `<div class="meta-row"><span class="meta-key">Description</span><span class="meta-val">${esc(r.homepage_description)}</span></div>`;
+  if(r.homepage_og_title && r.homepage_og_title !== r.homepage_title)
+    pageInner += `<div class="meta-row"><span class="meta-key">OG title</span><span class="meta-val">${esc(r.homepage_og_title)}</span></div>`;
+  if(r.schema_org_type) pageInner += `<div class="meta-row"><span class="meta-key">Schema.org type</span><span class="meta-val">${esc(r.schema_org_type)}</span></div>`;
+  if(r.homepage_word_count) pageInner += `<div class="meta-row"><span class="meta-key">Word count</span><span class="meta-val">${r.homepage_word_count.toLocaleString()}</span></div>`;
+  if(!pageInner) pageInner = `<span class="empty">Homepage data not available</span>`;
+  html += card("📄","Homepage content", pageInner);
 
   el("results").innerHTML = html;
 }
 
-el("scanBtn").addEventListener("click",scan);
-el("domainInput").addEventListener("keydown",e=>{ if(e.key==="Enter") scan(); });
-el("exportBtn").addEventListener("click",function(){
+/* ─── Events ─────────────────────────────────────────────────────────────── */
+el("scanBtn").addEventListener("click", scan);
+el("domainInput").addEventListener("keydown", e=>{ if(e.key==="Enter") scan(); });
+el("exportBtn").addEventListener("click", function(){
   const r = window._lastReport;
   if(r) document.title = "stack-report-" + r.domain + "-" + new Date().toISOString().slice(0,10);
-  // open raw data so it appears in the PDF
-  document.querySelectorAll("details").forEach(d=>d.open=true);
   window.print();
 });
 </script>
