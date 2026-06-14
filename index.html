@@ -15,7 +15,19 @@
   .sub { color: #94A3B8; font-size: 12px; }
   .container { max-width: 760px; margin: 0 auto; padding: 22px 16px; }
   .inputrow { display: flex; gap: 8px; margin-bottom: 8px; }
-  .emailrow { display: flex; gap: 8px; margin-bottom: 18px; }
+  .modal-bg { display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center; }
+  .modal-bg.open { display:flex; }
+  .modal { background:#fff;border-radius:12px;padding:28px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto; }
+  .modal h2 { font-size:16px;font-weight:800;color:#1A2B4A;margin-bottom:6px; }
+  .modal-sub { font-size:13px;color:#6B7280;margin-bottom:16px; }
+  .gdpr-box { background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:14px;font-size:11px;color:#6B7280;line-height:1.7;margin-bottom:14px; }
+  .gdpr-box strong { color:#374151; }
+  .consent-row { display:flex;align-items:flex-start;gap:10px;margin-bottom:18px;font-size:12px;color:#374151;cursor:pointer; }
+  .consent-row input { margin-top:2px;flex-shrink:0;width:16px;height:16px;cursor:pointer; }
+  .modal-btns { display:flex;gap:8px; }
+  .btn-send { background:#00B4A0;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;flex:1; }
+  .btn-send:disabled { background:#94A3B8; }
+  .btn-cancel { background:#F3F4F6;color:#374151;border:none;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer; }
   input { flex: 1; padding: 12px 14px; font-size: 15px; border: 2px solid #E5E7EB; border-radius: 8px; outline: none; }
   input:focus { border-color: #00B4A0; }
   input.small { font-size: 13px; padding: 10px 14px; }
@@ -80,10 +92,7 @@
   <div class="inputrow">
     <input id="domainInput" placeholder="clay.com" autocapitalize="off" autocorrect="off" spellcheck="false">
     <button id="scanBtn">Scan</button>
-    <button id="exportBtn" title="Export as PDF" style="display:none;background:#1A2B4A;padding:12px 14px">⬇ PDF</button>
-  </div>
-  <div class="emailrow">
-    <input id="emailInput" class="small" type="email" placeholder="email (optional — stored as lead)" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button id="sendBtn" title="Send report by email" style="display:none;background:#1A2B4A;padding:12px 18px;font-size:14px;font-weight:700">✉ Send report</button>
   </div>
   <div id="stage" class="stage" style="display:none"></div>
   <div id="error" class="err" style="display:none"></div>
@@ -92,6 +101,34 @@
     <div class="big">🔬</div>
     <p style="font-size:14px">Enter any domain to see their full tech stack and AI presence.</p>
     <p style="font-size:12px;color:#CBD5E1;margin-top:6px">Try: clay.com, hubspot.com, stripe.com</p>
+  </div>
+</div>
+
+<!-- Send report modal -->
+<div class="modal-bg" id="sendModal">
+  <div class="modal">
+    <h2>Send scan report by email</h2>
+    <p class="modal-sub" id="modalSub">We'll email you the full scan results for <strong id="modalDomain"></strong>.</p>
+    <input id="reportEmail" type="email" placeholder="your@email.com" style="width:100%;margin-bottom:14px;padding:11px 13px;font-size:14px;border:2px solid #E5E7EB;border-radius:8px;outline:none;box-sizing:border-box">
+    <div class="gdpr-box">
+      <strong>Privacy notice</strong><br>
+      Your email address is collected for the sole purpose of sending you this domain scan report, once. It will not be used for marketing or shared with third parties.<br><br>
+      <strong>Data controller:</strong> Domain Stack Scanner<br>
+      <strong>Legal basis:</strong> Your explicit consent (Art. 6(1)(a) GDPR)<br>
+      <strong>Retention:</strong> Your email address will be deleted within 30 days of sending the report, unless you separately opt in to further communication.<br><br>
+      <strong>Your rights:</strong> You have the right to access, rectify, or request deletion of your data at any time. To exercise these rights, reply to the email you receive or contact the operator directly.<br><br>
+      You may also lodge a complaint with the Belgian Data Protection Authority (Autoriteit Gegevensbescherming / Autorité de Protection des Données):<br>
+      <a href="https://www.dataprotectionauthority.be" target="_blank" style="color:#0891B2">www.dataprotectionauthority.be</a> &nbsp;·&nbsp; +32 (0)2 274 48 00
+    </div>
+    <label class="consent-row">
+      <input type="checkbox" id="gdprConsent">
+      <span>I have read the privacy notice above and I consent to my email address being used to send me this domain scan report. I understand I can withdraw my consent at any time.</span>
+    </label>
+    <div id="sendError" style="display:none;color:#DC2626;font-size:12px;margin-bottom:10px"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSendModal()">Cancel</button>
+      <button class="btn-send" id="submitSendBtn" onclick="submitSend()">Send report</button>
+    </div>
   </div>
 </div>
 
@@ -156,7 +193,6 @@ async function scan(){
     return;
   }
 
-  const email = el("emailInput").value.trim() || null;
   const btn=el("scanBtn"); btn.disabled=true; btn.textContent="Scanning...";
   const stage=el("stage"); stage.style.display="block";
   stage.textContent="Scanning domain via backend...";
@@ -165,7 +201,7 @@ async function scan(){
     const res = await fetch(`${API_URL}/scan`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({domain: d, email})
+      body: JSON.stringify({domain: d, email: null})
     });
     if(!res.ok){
       const err = await res.json().catch(()=>({detail:"Unknown error"}));
@@ -176,7 +212,7 @@ async function scan(){
     data._scannedFull = new Date().toLocaleString();
     window._lastReport = data;
     render(data);
-    el("exportBtn").style.display="block";
+    el("sendBtn").style.display="block";
   }catch(e){
     console.error(e);
     el("error").textContent = `Scan failed: ${e.message}`;
@@ -363,11 +399,62 @@ function render(r){
 /* ─── Events ─────────────────────────────────────────────────────────────── */
 el("scanBtn").addEventListener("click", scan);
 el("domainInput").addEventListener("keydown", e=>{ if(e.key==="Enter") scan(); });
-el("exportBtn").addEventListener("click", function(){
+el("sendBtn").addEventListener("click", function(){
   const r = window._lastReport;
-  if(r) document.title = "stack-report-" + r.domain + "-" + new Date().toISOString().slice(0,10);
-  window.print();
+  if(!r) return;
+  el("modalDomain").textContent = r.domain;
+  el("modalSub").innerHTML = `We'll email you the full scan results for <strong>${esc(r.domain)}</strong>.`;
+  el("reportEmail").value = "";
+  el("gdprConsent").checked = false;
+  el("sendError").style.display = "none";
+  el("submitSendBtn").disabled = false;
+  el("submitSendBtn").textContent = "Send report";
+  el("sendModal").classList.add("open");
 });
+
+function closeSendModal(){
+  el("sendModal").classList.remove("open");
+}
+
+async function submitSend(){
+  const email = el("reportEmail").value.trim();
+  const consent = el("gdprConsent").checked;
+  const scanId = window._lastReport && window._lastReport.scan_id;
+  const errEl = el("sendError");
+  errEl.style.display = "none";
+
+  if(!email || !email.includes("@")){ errEl.textContent="Enter a valid email address."; errEl.style.display="block"; return; }
+  if(!consent){ errEl.textContent="You must accept the privacy notice to receive the report."; errEl.style.display="block"; return; }
+  if(!scanId){ errEl.textContent="No scan found. Please scan a domain first."; errEl.style.display="block"; return; }
+
+  const btn = el("submitSendBtn");
+  btn.disabled = true; btn.textContent = "Sending...";
+
+  try{
+    const res = await fetch(`${API_URL}/send-report`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({scan_id: scanId, email, consent: true})
+    });
+    const data = await res.json();
+    if(data.ok){
+      el("modalSub").innerHTML = `<span style="color:#16A34A;font-weight:700">&#10003; Report sent to ${esc(email)}</span>`;
+      el("reportEmail").style.display = "none";
+      document.querySelector(".gdpr-box").style.display = "none";
+      document.querySelector(".consent-row").style.display = "none";
+      btn.style.display = "none";
+    } else {
+      errEl.textContent = data.error || "Something went wrong.";
+      errEl.style.display = "block";
+      btn.disabled = false; btn.textContent = "Send report";
+    }
+  }catch(e){
+    errEl.textContent = "Network error. Please try again.";
+    errEl.style.display = "block";
+    btn.disabled = false; btn.textContent = "Send report";
+  }
+}
+
+el("sendModal").addEventListener("click", function(e){ if(e.target === this) closeSendModal(); });
 </script>
 </body>
 </html>

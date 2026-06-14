@@ -27,9 +27,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_supabase_url = os.getenv("SUPABASE_URL") or ""
-_supabase_key = os.getenv("SUPABASE_KEY") or ""
-_mistral_key  = os.getenv("MISTRAL_API_KEY") or ""
+_supabase_url  = os.getenv("SUPABASE_URL") or ""
+_supabase_key  = os.getenv("SUPABASE_KEY") or ""
+_mistral_key   = os.getenv("MISTRAL_API_KEY") or ""
+_resend_key    = os.getenv("RESEND_API_KEY") or ""
+_resend_from   = os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
 
 supabase = create_client(_supabase_url, _supabase_key) if _supabase_url and _supabase_key else None
 mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
@@ -208,7 +210,7 @@ SPF_MAP = {
 }
 
 IP_HOSTS = [
-    ("199.60.103.", "Squarespace"), ("185.230.6", "Wix"),
+    ("185.230.6", "Wix"),
     ("104.16.", "Cloudflare"), ("104.17.", "Cloudflare"),
     ("104.18.", "Cloudflare"), ("104.19.", "Cloudflare"),
     ("172.67.", "Cloudflare"), ("13.", "AWS"), ("52.", "AWS"),
@@ -675,10 +677,18 @@ async def scan(request: Request, body: ScanRequest):
     internal_tools = txt_parsed.get("tools", [])
     security_headers = header_det.get("security", [])
 
-    # llms.txt
+    # llms.txt — strip HTML if the URL returns an HTML page instead of plain text
     llms_txt_found = bool(llms_resp and llms_resp.status_code == 200)
     llms_full_txt_found = bool(llms_full_resp and llms_full_resp.status_code == 200)
-    llms_txt_content = llms_resp.text if llms_txt_found else None
+    if llms_txt_found:
+        raw_llms = llms_resp.text.strip()
+        if raw_llms.lower().startswith("<!doctype") or raw_llms.lower().startswith("<html"):
+            soup = BeautifulSoup(raw_llms, "html.parser")
+            llms_txt_content = soup.get_text(separator="\n", strip=True)
+        else:
+            llms_txt_content = raw_llms
+    else:
+        llms_txt_content = None
 
     # sitemap
     sitemap_found = bool(sitemap_resp and sitemap_resp.status_code == 200)
@@ -858,3 +868,142 @@ async def scan(request: Request, body: ScanRequest):
         "tld": tld,
         "inferred_country": country,
     }
+
+
+# ─── Email report ─────────────────────────────────────────────────────────────
+
+def _score_color(score):
+    if score is None: return "#9CA3AF"
+    if score >= 70: return "#16A34A"
+    if score >= 40: return "#D97706"
+    return "#DC2626"
+
+def build_email_html(s: dict) -> str:
+    domain = s.get("domain", "")
+    score = s.get("geo_ai_readiness_score")
+    sc = _score_color(score)
+    gaps = s.get("geo_gaps") or []
+    gaps_html = "".join(f"<li style='margin-bottom:4px'>{g}</li>" for g in gaps) or "<li>None detected</li>"
+    stack_items = [
+        ("Email", s.get("email_provider")),
+        ("DNS", s.get("dns_host")),
+        ("CDN", ", ".join(s.get("cdn") or [])),
+        ("Hosting", ", ".join(s.get("hosting") or [])),
+        ("CMS", ", ".join(s.get("cms") or [])),
+        ("CRM", ", ".join(s.get("crm") or [])),
+        ("Marketing", ", ".join(s.get("marketing_tools") or [])),
+    ]
+    stack_rows = "".join(
+        f"<tr><td style='padding:5px 0;color:#6B7280;font-size:12px;width:140px'>{k}</td>"
+        f"<td style='padding:5px 0;font-size:12px'>{v}</td></tr>"
+        for k, v in stack_items if v
+    )
+    wiki = s.get("wikipedia_url")
+    wiki_html = f'<a href="{wiki}" style="color:#0891B2">Wikipedia page found</a>' if wiki else "No Wikipedia page"
+    bot_rows = "".join(
+        f"<tr><td style='padding:4px 0;font-size:12px;color:#374151'>{bot}</td>"
+        f"<td style='font-size:12px;font-weight:700;color:{'#16A34A' if ok else '#DC2626'}'>&nbsp;{'&#10003; Allowed' if ok else '&#10007; Blocked'}</td></tr>"
+        for bot, ok in [
+            ("GPTBot (ChatGPT)", s.get("robots_txt_allows_gptbot")),
+            ("ClaudeBot (Anthropic)", s.get("robots_txt_allows_claudebot")),
+            ("PerplexityBot", s.get("robots_txt_allows_perplexity")),
+            ("Google-Extended", s.get("robots_txt_allows_google_extended")),
+        ] if ok is not None
+    )
+    llms_color = "#16A34A" if s.get("llms_txt_found") else "#DC2626"
+    llms_label = "&#10003; Found" if s.get("llms_txt_found") else "&#10007; Not found"
+    score_block = "" if score is None else (
+        f"<div style='display:inline-block;background:{sc}18;border:1px solid {sc}40;"
+        f"border-radius:8px;padding:12px 20px;margin-bottom:20px'>"
+        f"<span style='font-size:36px;font-weight:800;color:{sc}'>{score}</span>"
+        f"<span style='font-size:13px;color:#6B7280;margin-left:6px'>/ 100 AI readiness</span></div>"
+    )
+    positioning = (
+        f"<p style='font-size:14px;color:#374151;margin-bottom:20px'>"
+        f"<strong>Positioning:</strong> {s['geo_positioning']}</p>"
+    ) if s.get("geo_positioning") else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>Domain scan: {domain}</title></head>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden">
+  <div style="background:#1A2B4A;padding:24px;border-bottom:3px solid #00B4A0">
+    <p style="color:#00B4A0;margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em">Domain Scan Report</p>
+    <h1 style="color:#fff;margin:6px 0 0;font-size:22px;font-weight:800">{domain}</h1>
+  </div>
+  <div style="padding:24px">
+    {score_block}{positioning}
+    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">GEO gaps</h2>
+    <ul style="font-size:13px;color:#DC2626;padding-left:18px;margin-bottom:20px">{gaps_html}</ul>
+    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">Tech stack</h2>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">{stack_rows}</table>
+    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">Knowledge graph</h2>
+    <p style="font-size:13px;margin-bottom:20px">{wiki_html}</p>
+    <h2 style="font-size:14px;font-weight:700;color:#1A2B4A;margin-bottom:10px">AI crawler access</h2>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">{bot_rows}
+      <tr><td style="padding:4px 0;font-size:12px;color:#374151">llms.txt</td>
+          <td style="font-size:12px;font-weight:700;color:{llms_color}">&nbsp;{llms_label}</td></tr>
+    </table>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 24px;border-top:1px solid #E5E7EB;font-size:11px;color:#9CA3AF;line-height:1.6">
+    You requested this report via Domain Stack Scanner. Your email was used solely to deliver this report.<br>
+    To request deletion of your data, reply to this email with "delete my data".<br>
+    Data controller: Domain Stack Scanner &nbsp;&middot;&nbsp; Legal basis: Art. 6(1)(a) GDPR &nbsp;&middot;&nbsp;
+    Belgian DPA: <a href="https://www.dataprotectionauthority.be" style="color:#9CA3AF">dataprotectionauthority.be</a>
+  </div>
+</div>
+</body></html>"""
+
+
+class SendReportRequest(BaseModel):
+    scan_id: str
+    email: str
+    consent: bool
+
+
+@app.post("/send-report")
+async def send_report_endpoint(body: SendReportRequest):
+    if not body.consent:
+        return {"ok": False, "error": "Consent is required."}
+    if not _resend_key:
+        return {"ok": False, "error": "Email sending is not configured on this server."}
+    if not supabase:
+        return {"ok": False, "error": "Database not configured."}
+
+    result = supabase.table("scans").select("*").eq("id", body.scan_id).limit(1).execute()
+    if not result.data:
+        return {"ok": False, "error": "Scan not found."}
+
+    scan = result.data[0]
+    html = build_email_html(scan)
+
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {_resend_key}", "Content-Type": "application/json"},
+            json={
+                "from": _resend_from,
+                "to": [body.email],
+                "subject": f"Your domain scan report: {scan.get('domain', '')}",
+                "html": html,
+            },
+            timeout=15,
+        )
+
+    if r.status_code not in (200, 201):
+        return {"ok": False, "error": f"Email delivery failed ({r.status_code})."}
+
+    try:
+        if supabase:
+            supabase.table("leads").upsert({
+                "email": body.email,
+                "domain": scan.get("domain"),
+                "first_scan_id": body.scan_id,
+                "gdpr_consent": True,
+                "gdpr_consent_at": "now()",
+            }, on_conflict="email").execute()
+    except Exception:
+        pass
+
+    return {"ok": True}
