@@ -338,11 +338,21 @@ function render(r){
   crawlerInner += `</div>`;
   html += card("🕷️","AI Crawler Access", crawlerInner, "robots.txt + llms.txt");
 
-  // ── CMS / CRM / Marketing / Internal tools ────────────────────────────────
+  // ── Stack cards ───────────────────────────────────────────────────────────
   html += card("📝","CMS / Website platform", emptyOr(r.cms||[], (r.cms||[]).map(t=>tag(t,"#DB2777")).join("")));
   html += card("📊","CRM", emptyOr(r.crm||[], (r.crm||[]).map(t=>tag(t,"#7C3AED")).join("")));
   html += card("📣","Marketing &amp; email tools", emptyOr(r.marketing_tools||[], (r.marketing_tools||[]).map(t=>tag(t,"#EA580C")).join("")));
   html += card("🛠","Internal tools", emptyOr(r.internal_tools||[], (r.internal_tools||[]).map(t=>tag(t,"#D97706")).join("")));
+
+  // ── HTML-detected tools (new categories) ─────────────────────────────────
+  html += `<div class="grid2">
+    ${card("📈","Analytics &amp; tracking", emptyOr(r.analytics_tools||[], (r.analytics_tools||[]).map(t=>tag(t,"#6366F1")).join("")), "from page source")}
+    ${card("💬","Chat &amp; support", emptyOr(r.chat_tools||[], (r.chat_tools||[]).map(t=>tag(t,"#0891B2")).join("")), "from page source")}
+  </div>`;
+  html += `<div class="grid2">
+    ${card("🎯","Intent &amp; visitor ID", emptyOr(r.intent_tools||[], (r.intent_tools||[]).map(t=>tag(t,"#DC2626")).join("")), "from page source")}
+    ${card("⭐","Review platforms", emptyOr(r.review_platforms||[], (r.review_platforms||[]).map(t=>tag(t,"#F59E0B")).join("")), "from page source")}
+  </div>`;
 
   // ── IPs + SSL issuer ──────────────────────────────────────────────────────
   const ipv4 = r.ipv4_addresses || [];

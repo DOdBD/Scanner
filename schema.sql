@@ -46,6 +46,10 @@ create table if not exists scans (
   crm                 text[],
   marketing_tools     text[],
   internal_tools      text[],
+  analytics_tools     text[],
+  chat_tools          text[],
+  intent_tools        text[],
+  review_platforms    text[],
 
   -- verified vendors
   verified_vendors    text[],

@@ -116,6 +116,13 @@ TXT_FP = {
     "servicenow": ("ServiceNow", "tools"),
     "qualtrics": ("Qualtrics", "marketing"),
     "surveymonkey": ("SurveyMonkey", "marketing"),
+    "ahrefs-site-verification": ("Ahrefs", "tools"),
+    "semrush": ("SEMrush", "tools"),
+    "outreach-domain-verification": ("Outreach", "tools"),
+    "salesloft-site-verification": ("Salesloft", "tools"),
+    "spf.activecampaign.com": ("ActiveCampaign", "marketing"),
+    "lemlist": ("Lemlist", "tools"),
+    "apollo": ("Apollo", "tools"),
 }
 
 NS_HOSTS = {
@@ -150,6 +157,9 @@ VERIFY_FP = {
     "canva-domain-verification": "Canva",
     "figma": "Figma",
     "calendly": "Calendly",
+    "ahrefs-site-verification": "Ahrefs",
+    "outreach-domain-verification": "Outreach",
+    "salesloft-site-verification": "Salesloft",
 }
 
 HEADER_FP = [
@@ -189,6 +199,91 @@ SEC_HEADERS = [
     "strict-transport-security", "content-security-policy",
     "x-frame-options", "x-content-type-options",
     "referrer-policy", "permissions-policy",
+]
+
+# ─── HTML body fingerprints ────────────────────────────────────────────────────
+# Each entry: pattern to search (case-insensitive) in raw HTML, label, category
+# Categories: analytics | chat | intent | reviews | sales | ab_testing | cms | marketing | tools
+HTML_FP = [
+    # Analytics & tracking
+    {"p": "hotjar.com",           "l": "Hotjar",              "c": "analytics"},
+    {"p": "static.hotjar.com",    "l": "Hotjar",              "c": "analytics"},
+    {"p": "mixpanel.com",         "l": "Mixpanel",            "c": "analytics"},
+    {"p": "cdn.amplitude.com",    "l": "Amplitude",           "c": "analytics"},
+    {"p": "clarity.ms",           "l": "Microsoft Clarity",   "c": "analytics"},
+    {"p": "fullstory.com",        "l": "FullStory",           "c": "analytics"},
+    {"p": "heap.io",              "l": "Heap",                "c": "analytics"},
+    {"p": "heapanalytics.com",    "l": "Heap",                "c": "analytics"},
+    {"p": "plausible.io",         "l": "Plausible",           "c": "analytics"},
+    {"p": "posthog.com",          "l": "PostHog",             "c": "analytics"},
+    {"p": "matomo",               "l": "Matomo",              "c": "analytics"},
+    {"p": "googletagmanager.com", "l": "Google Tag Manager",  "c": "analytics"},
+    {"p": "google-analytics.com", "l": "Google Analytics",    "c": "analytics"},
+    {"p": "gtag/js",              "l": "Google Analytics",    "c": "analytics"},
+    # Chat & support
+    {"p": "js.drift.com",         "l": "Drift",               "c": "chat"},
+    {"p": "drift.com/include",    "l": "Drift",               "c": "chat"},
+    {"p": "client.crisp.chat",    "l": "Crisp",               "c": "chat"},
+    {"p": "tidiochat.com",        "l": "Tidio",               "c": "chat"},
+    {"p": "widget.intercom.io",   "l": "Intercom",            "c": "chat"},
+    {"p": "js.intercomcdn.com",   "l": "Intercom",            "c": "chat"},
+    {"p": "static.zdassets.com",  "l": "Zendesk Chat",        "c": "chat"},
+    {"p": "freshchat.com",        "l": "Freshchat",           "c": "chat"},
+    {"p": "embed.tawk.to",        "l": "Tawk.to",             "c": "chat"},
+    {"p": "userlike.com",         "l": "Userlike",            "c": "chat"},
+    {"p": "chatra.io",            "l": "Chatra",              "c": "chat"},
+    # Intent / visitor identification (high GTM value for Benelux B2B)
+    {"p": "serve.albacross.com",  "l": "Albacross",           "c": "intent"},
+    {"p": "albacross.com",        "l": "Albacross",           "c": "intent"},
+    {"p": "script.leadinfo.com",  "l": "Leadinfo",            "c": "intent"},
+    {"p": "leadinfo.com",         "l": "Leadinfo",            "c": "intent"},
+    {"p": "lf-cdn.com",           "l": "Leadfeeder/Dealfront","c": "intent"},
+    {"p": "leadfeeder.com",       "l": "Leadfeeder/Dealfront","c": "intent"},
+    {"p": "ws.zoominfo.com",      "l": "ZoomInfo WebSights",  "c": "intent"},
+    {"p": "6sc.co",               "l": "6sense",              "c": "intent"},
+    {"p": "clearbit.com/e",       "l": "Clearbit Reveal",     "c": "intent"},
+    # Review platforms
+    {"p": "widget.trustpilot.com","l": "Trustpilot",          "c": "reviews"},
+    {"p": "trustpilot.com",       "l": "Trustpilot",          "c": "reviews"},
+    {"p": "app.g2.com",           "l": "G2",                  "c": "reviews"},
+    {"p": "g2.com/products",      "l": "G2",                  "c": "reviews"},
+    {"p": "widget.reviews.io",    "l": "Reviews.io",          "c": "reviews"},
+    {"p": "capterra.com",         "l": "Capterra",            "c": "reviews"},
+    # Sales engagement & outreach
+    {"p": "lemlist.com",          "l": "Lemlist",             "c": "sales"},
+    {"p": "outreach.io",          "l": "Outreach",            "c": "sales"},
+    {"p": "salesloft.com",        "l": "Salesloft",           "c": "sales"},
+    {"p": "apollo.io",            "l": "Apollo",              "c": "sales"},
+    {"p": "reply.io",             "l": "Reply.io",            "c": "sales"},
+    {"p": "lusha.com",            "l": "Lusha",               "c": "sales"},
+    # A/B testing & optimisation
+    {"p": "vwo.com",              "l": "VWO",                 "c": "ab_testing"},
+    {"p": "optimizely.com",       "l": "Optimizely",          "c": "ab_testing"},
+    {"p": "abtasty.com",          "l": "AB Tasty",            "c": "ab_testing"},
+    {"p": "convert.com/services", "l": "Convert",             "c": "ab_testing"},
+    # CMS detection via scripts
+    {"p": "wp-content",           "l": "WordPress",           "c": "cms"},
+    {"p": "wp-includes",          "l": "WordPress",           "c": "cms"},
+    {"p": "hs-scripts.com",       "l": "HubSpot CMS",         "c": "cms"},
+    {"p": "hsforms.com",          "l": "HubSpot CMS",         "c": "cms"},
+    {"p": "wixstatic.com",        "l": "Wix",                 "c": "cms"},
+    {"p": "ghost.io",             "l": "Ghost",               "c": "cms"},
+    {"p": "webflow.io",           "l": "Webflow",             "c": "cms"},
+    # Paid ads & retargeting
+    {"p": "connect.facebook.net", "l": "Meta Pixel",          "c": "marketing"},
+    {"p": "snap.licdn.com",       "l": "LinkedIn Insight Tag","c": "marketing"},
+    {"p": "bat.bing.com",         "l": "Microsoft Ads",       "c": "marketing"},
+    {"p": "googleadservices.com", "l": "Google Ads",          "c": "marketing"},
+    # Other tools
+    {"p": "vidyard.com",          "l": "Vidyard",             "c": "tools"},
+    {"p": "wistia.com",           "l": "Wistia",              "c": "tools"},
+    {"p": "pendo.io",             "l": "Pendo",               "c": "tools"},
+    {"p": "appcues.com",          "l": "Appcues",             "c": "tools"},
+    {"p": "walkme.com",           "l": "WalkMe",              "c": "tools"},
+    {"p": "cdn.segment.com",      "l": "Segment",             "c": "tools"},
+    {"p": "chilipiper.com",       "l": "Chili Piper",         "c": "tools"},
+    {"p": "gainsight.com",        "l": "Gainsight",           "c": "tools"},
+    {"p": "ahrefs-site-verification","l": "Ahrefs",           "c": "tools"},
 ]
 
 SPF_MAP = {
@@ -465,6 +560,15 @@ SCHEMA_ORG_SCORED_FIELDS = {
     "contactPoint": 5, "potentialAction": 5,
 }
 
+def parse_html_body(html: str) -> dict:
+    out = {"analytics": [], "chat": [], "intent": [], "reviews": [], "sales": [], "ab_testing": [], "cms": [], "marketing": [], "tools": []}
+    html_low = html.lower()
+    for fp in HTML_FP:
+        if fp["p"].lower() in html_low:
+            bucket = out.get(fp["c"], out["tools"])
+            push(bucket, fp["l"])
+    return out
+
 def score_schema_org(schema_raw: Optional[dict]) -> tuple:
     if not schema_raw:
         return 0, []
@@ -673,10 +777,18 @@ async def scan(request: Request, body: ScanRequest):
     hosting = uniq(header_det.get("hosting", []) + ip_hosts)
     cdn = header_det.get("cdn", [])
     web_server = header_det.get("server", [])
-    cms = uniq(header_det.get("cms", []) + txt_parsed.get("cms", []))
+
+    # HTML body fingerprinting
+    html_det = parse_html_body(homepage_html) if homepage_html else {}
+
+    cms = uniq(header_det.get("cms", []) + txt_parsed.get("cms", []) + html_det.get("cms", []))
     crm = txt_parsed.get("crm", [])
-    marketing_tools = uniq(txt_parsed.get("marketing", []) + spf_parsed["senders"])
-    internal_tools = txt_parsed.get("tools", [])
+    marketing_tools = uniq(txt_parsed.get("marketing", []) + spf_parsed["senders"] + html_det.get("marketing", []))
+    internal_tools = uniq(txt_parsed.get("tools", []) + html_det.get("tools", []) + html_det.get("sales", []) + html_det.get("ab_testing", []))
+    analytics_tools = html_det.get("analytics", [])
+    chat_tools = html_det.get("chat", [])
+    intent_tools = html_det.get("intent", [])
+    review_platforms = html_det.get("reviews", [])
     security_headers = header_det.get("security", [])
 
     # llms.txt — strip HTML if the URL returns an HTML page instead of plain text
@@ -706,6 +818,10 @@ async def scan(request: Request, body: ScanRequest):
         "crm": crm,
         "marketing_tools": marketing_tools,
         "internal_tools": internal_tools,
+        "analytics_tools": analytics_tools,
+        "chat_tools": chat_tools,
+        "intent_tools": intent_tools,
+        "review_platforms": review_platforms,
         "verified_vendors": verifications,
         "cdn": cdn,
         "hosting": hosting,
@@ -753,6 +869,10 @@ async def scan(request: Request, body: ScanRequest):
         "crm": crm,
         "marketing_tools": marketing_tools,
         "internal_tools": internal_tools,
+        "analytics_tools": analytics_tools,
+        "chat_tools": chat_tools,
+        "intent_tools": intent_tools,
+        "review_platforms": review_platforms,
         "verified_vendors": verifications,
         "has_openai": "OpenAI (ChatGPT)" in verifications,
         "has_anthropic": "Anthropic (Claude)" in verifications,
@@ -833,6 +953,10 @@ async def scan(request: Request, body: ScanRequest):
         "crm": crm,
         "marketing_tools": marketing_tools,
         "internal_tools": internal_tools,
+        "analytics_tools": analytics_tools,
+        "chat_tools": chat_tools,
+        "intent_tools": intent_tools,
+        "review_platforms": review_platforms,
         "verified_vendors": verifications,
         "has_openai": "OpenAI (ChatGPT)" in verifications,
         "has_anthropic": "Anthropic (Claude)" in verifications,
