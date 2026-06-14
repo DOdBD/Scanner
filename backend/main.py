@@ -13,7 +13,6 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 from supabase import create_client
 import os
@@ -29,7 +28,6 @@ app.add_middleware(
 )
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
@@ -462,14 +460,6 @@ Return only valid JSON, no markdown fences."""
     parsed["raw"] = raw
     return parsed
 
-# ─── OpenAI embeddings ────────────────────────────────────────────────────────
-
-async def embed(texts: list[str]) -> list[list[float]]:
-    response = await openai_client.embeddings.create(
-        model="text-embedding-3-small",
-        input=texts,
-    )
-    return [item.embedding for item in response.data]
 
 # ─── Request model ────────────────────────────────────────────────────────────
 
@@ -595,19 +585,7 @@ async def scan(request: Request, body: ScanRequest):
     # ── 6. Claude GEO synthesis ───────────────────────────────────────────────
     geo = geo_synthesis(raw_domain, homepage, llms_txt_content, stack)
 
-    # ── 7. Embeddings ─────────────────────────────────────────────────────────
-    positioning_text = geo.get("positioning") or homepage.get("description") or raw_domain
-    synthesis_text = geo.get("raw") or positioning_text
-    stack_text = (
-        f"domain:{raw_domain} email:{email_provider} dns:{dns_host} "
-        f"cdn:{','.join(cdn)} hosting:{','.join(hosting)} cms:{','.join(cms)} "
-        f"crm:{','.join(crm)} marketing:{','.join(marketing_tools)}"
-    )
-
-    embeddings = await embed([positioning_text, synthesis_text, stack_text])
-    pos_emb, syn_emb, stk_emb = embeddings
-
-    # ── 8. Write scan to Supabase ─────────────────────────────────────────────
+    # ── 7. Write scan to Supabase ─────────────────────────────────────────────
     scan_row = {
         "domain": raw_domain,
         "scanner_ip_hash": ip_hash,
@@ -663,11 +641,6 @@ async def scan(request: Request, body: ScanRequest):
         "geo_gaps": geo.get("geo_gaps", []),
         "geo_synthesis_raw": geo.get("raw"),
         "geo_model_used": "claude-sonnet-4-6",
-        "positioning_embedding": pos_emb,
-        "synthesis_embedding": syn_emb,
-        "stack_embedding": stk_emb,
-        "embedding_model": "text-embedding-3-small",
-        "embedding_model_version": "3-small",
     }
 
     # Mark previous scans for this domain as not latest

@@ -1,6 +1,3 @@
--- Enable pgvector
-create extension if not exists vector;
-
 -- ─── leads ────────────────────────────────────────────────────────────────────
 create table if not exists leads (
   id                  uuid primary key default gen_random_uuid(),
@@ -97,13 +94,6 @@ create table if not exists scans (
   geo_synthesis_raw       text,
   geo_model_used          text,
 
-  -- embeddings
-  positioning_embedding   vector(1536),
-  synthesis_embedding     vector(1536),
-  stack_embedding         vector(1536),
-  embedding_model         text,
-  embedding_model_version text,
-  embedding_generated_at  timestamptz
 );
 
 -- ─── FK back-reference ────────────────────────────────────────────────────────
