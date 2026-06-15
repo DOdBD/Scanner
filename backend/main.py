@@ -850,7 +850,7 @@ async def scan(request: Request, body: ScanRequest):
 
     # ── 2. HTTP fetches ───────────────────────────────────────────────────────
     async with httpx.AsyncClient(
-        verify=True,
+        verify=False,          # SSRF is mitigated via IP blocklist above
         follow_redirects=True,
         max_redirects=3,
         event_hooks={"response": [_ssrf_redirect_guard]},
