@@ -680,6 +680,9 @@ def geo_synthesis(
     wikipedia: dict,
     schema_completeness: int,
     stack_delta: dict,
+    robots: dict,
+    sitemap_found: bool,
+    sitemap_count: int,
 ) -> dict:
     stack_summary = (
         f"Email: {stack.get('email_provider') or 'unknown'}, "
@@ -698,25 +701,49 @@ def geo_synthesis(
                 parts.append(f"-{', '.join(changes['removed'])} ({field})")
         delta_summary = "Stack changes since last scan: " + "; ".join(parts)
 
+    def _bot(allowed) -> str:
+        if allowed is True:  return "allowed"
+        if allowed is False: return "blocked"
+        return "unknown"
+
     prompt = f"""You are analyzing {domain} for Generative Engine Optimization (GEO).
+Only report gaps that are factually confirmed by the data below. Do NOT invent or assume missing items.
 
 Homepage title: {homepage.get('title') or 'N/A'}
 Homepage description: {homepage.get('description') or 'N/A'}
-Schema.org type: {homepage.get('schema_org_type') or 'N/A'}
+Schema.org type: {homepage.get('schema_org_type') or 'none detected'}
 Schema.org completeness: {schema_completeness}/100
 Word count: {homepage.get('word_count', 0)}
 Tech stack: {stack_summary}
-Wikipedia presence: {'yes — ' + wikipedia.get('url', '') if wikipedia.get('found') else 'no'}
-llms.txt present: {'yes' if llms_txt else 'no'}
-llms.txt content: {llms_txt[:800] if llms_txt else 'N/A'}
+
+Crawlability (confirmed by live scan):
+- robots.txt: {'found' if robots.get('robots_txt_found') else 'not found'}
+- sitemap.xml: {'found — ' + str(sitemap_count) + ' URLs' if sitemap_found else 'not found'}
+- GPTBot: {_bot(robots.get('allows_gptbot'))}
+- ClaudeBot: {_bot(robots.get('allows_claudebot'))}
+- PerplexityBot: {_bot(robots.get('allows_perplexity'))}
+- Google-Extended: {_bot(robots.get('allows_google_extended'))}
+
+AI guidance:
+- llms.txt: {'found' if llms_txt else 'not found'}
+- llms.txt content: {llms_txt[:800] if llms_txt else 'N/A'}
+- Wikipedia: {'yes — ' + wikipedia.get('url', '') if wikipedia.get('found') else 'not found'}
 {delta_summary}
 
 Return a JSON object with exactly these keys:
 - positioning: one sentence describing how this company positions itself (max 120 chars)
 - target_market: who they serve (max 80 chars)
 - tone_of_voice: e.g. "technical", "enterprise", "friendly B2B" (max 40 chars)
-- ai_readiness_score: integer 0-100 (100 = fully AI-crawler-ready: has llms.txt, allows all bots, rich schema.org, Wikipedia presence, clear positioning)
-- geo_gaps: array of short strings, each a specific actionable gap (e.g. "No llms.txt", "No Wikipedia page", "Schema.org completeness only 15/100", "No schema.org markup")"""
+- ai_readiness_score: integer 0-100. Scoring guide:
+    +15 if robots.txt found
+    +15 if sitemap.xml found
+    +10 if all major AI bots allowed
+    +20 if llms.txt found and has real content
+    +15 if schema.org completeness > 30
+    +10 if Wikipedia presence
+    +15 if clear homepage title, description, and positioning
+  Score accordingly — do not give low scores for items confirmed as present.
+- geo_gaps: array of short actionable strings. Only include gaps for items confirmed MISSING in the data above. Do NOT list gaps for robots.txt, sitemap, or bot access if they are confirmed present."""
 
     if not mistral_client:
         return {"positioning": None, "target_market": None, "tone_of_voice": None,
@@ -926,7 +953,18 @@ async def scan(request: Request, body: ScanRequest):
             pass
 
     # ── 7. GEO synthesis ──────────────────────────────────────────────────────
-    geo = geo_synthesis(raw_domain, homepage, llms_txt_content, stack, wikipedia, schema_completeness, stack_delta)
+    robots_for_prompt = {
+        "robots_txt_found": robots_found,
+        "allows_gptbot": robots.get("allows_gptbot"),
+        "allows_claudebot": robots.get("allows_claudebot"),
+        "allows_perplexity": robots.get("allows_perplexity"),
+        "allows_google_extended": robots.get("allows_google_extended"),
+    }
+    geo = geo_synthesis(
+        raw_domain, homepage, llms_txt_content, stack,
+        wikipedia, schema_completeness, stack_delta,
+        robots_for_prompt, sitemap_found, sitemap_count,
+    )
 
     # ── 8. Write scan to Supabase ─────────────────────────────────────────────
     scan_row = {
