@@ -87,13 +87,16 @@ supabase = create_client(_supabase_url, _supabase_key) if _supabase_url and _sup
 mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
 
 @app.get("/health")
-def health():
+def health(request: Request):
     return {
         "status": "ok",
         "SUPABASE_URL":    "set" if _supabase_url else "MISSING",
         "SUPABASE_KEY":    "set" if _supabase_key else "MISSING",
         "MISTRAL_API_KEY": "set" if _mistral_key  else "MISSING",
         "BREVO_API_KEY":   "set" if _brevo_key    else "MISSING",
+        "client_host":     request.client.host if request.client else None,
+        "x_forwarded_for": request.headers.get("x-forwarded-for"),
+        "x_real_ip":       request.headers.get("x-real-ip"),
     }
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
@@ -754,7 +757,7 @@ class ScanRequest(BaseModel):
 # ─── Main scan endpoint ───────────────────────────────────────────────────────
 
 @app.post("/scan")
-@limiter.limit("10/hour")
+@limiter.limit("30/hour")
 async def scan(request: Request, body: ScanRequest):
     raw_domain = body.domain.strip().lower()
     raw_domain = re.sub(r"^https?://", "", raw_domain)
@@ -1195,7 +1198,7 @@ class SendReportRequest(BaseModel):
 
 
 @app.post("/send-report")
-@limiter.limit("10/hour")
+@limiter.limit("30/hour")
 async def send_report_endpoint(request: Request, body: SendReportRequest):
     if not body.consent:
         return {"ok": False, "error": "Consent is required."}
