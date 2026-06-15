@@ -644,33 +644,18 @@ HEADERS = {
 }
 
 async def _ssrf_redirect_guard(response: httpx.Response) -> None:
-    """Validates each redirect target before httpx follows it."""
+    """Block redirects to raw private IPs (e.g. 169.254.169.254)."""
     if response.is_redirect:
         location = response.headers.get("location", "")
         if location:
-            try:
-                target = httpx.URL(location)
-                host = target.host
-                if host:
-                    try:
-                        ipaddress.ip_address(host)
-                        # It's a raw IP — block if private
-                        if not _is_safe_ip(host):
-                            raise ValueError(f"Redirect to private IP blocked: {host}")
-                    except ValueError as e:
-                        if "blocked" in str(e):
-                            raise
-                        # It's a hostname — check resolved IPs
-                        import socket
-                        try:
-                            for info in socket.getaddrinfo(host, None):
-                                ip = info[4][0]
-                                if not _is_safe_ip(ip):
-                                    raise ValueError(f"Redirect to private range blocked: {ip}")
-                        except socket.gaierror:
-                            pass
-            except ValueError:
-                raise
+            host = httpx.URL(location).host
+            if host:
+                try:
+                    # Only act if the redirect target is a raw IP address
+                    if not _is_safe_ip(host):
+                        raise httpx.InvalidURL(f"Redirect to private IP blocked: {host}")
+                except ValueError:
+                    pass  # Not an IP address — hostname redirects are allowed
 
 async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Response]:
     try:
