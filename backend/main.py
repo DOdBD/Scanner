@@ -667,8 +667,7 @@ async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Respo
     try:
         r = await client.get(url, timeout=10, follow_redirects=True, headers=HEADERS)
         return r
-    except Exception as e:
-        print(f"[fetch_url] {url}: {type(e).__name__}: {str(e)[:120]}")
+    except Exception:
         return None
 
 # ─── Factual AI-readiness score ───────────────────────────────────────────────
