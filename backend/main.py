@@ -670,6 +670,47 @@ async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Respo
     except Exception:
         return None
 
+# ─── Factual AI-readiness score ───────────────────────────────────────────────
+
+def compute_ai_readiness_score(
+    robots_found: bool,
+    sitemap_found: bool,
+    sitemap_count: int,
+    bots: dict,
+    llms_txt_found: bool,
+    llms_txt_content: Optional[str],
+    wikipedia_found: bool,
+    schema_completeness: int,
+    homepage_title: Optional[str],
+    homepage_description: Optional[str],
+) -> int:
+    score = 0
+    # Technical crawlability (40 pts)
+    if robots_found:                                   score += 15
+    if sitemap_found and sitemap_count > 0:            score += 15
+    all_bots_ok = all([
+        bots.get("allows_gptbot"),
+        bots.get("allows_claudebot"),
+        bots.get("allows_perplexity"),
+        bots.get("allows_google_extended"),
+    ])
+    if all_bots_ok:                                    score += 10
+    # AI guidance files (20 pts)
+    if llms_txt_found and llms_txt_content and len(llms_txt_content) > 200:
+        score += 20
+    elif llms_txt_found:
+        score += 8
+    # Knowledge graph (10 pts)
+    if wikipedia_found:                                score += 10
+    # Structured data (15 pts)
+    if schema_completeness >= 50:                      score += 15
+    elif schema_completeness >= 20:                    score += 8
+    elif schema_completeness > 0:                      score += 3
+    # Content clarity (15 pts)
+    if homepage_title and homepage_description:        score += 15
+    elif homepage_title or homepage_description:       score += 7
+    return min(score, 100)
+
 # ─── Mistral GEO synthesis ────────────────────────────────────────────────────
 
 def geo_synthesis(
@@ -734,16 +775,9 @@ Return a JSON object with exactly these keys:
 - positioning: one sentence describing how this company positions itself (max 120 chars)
 - target_market: who they serve (max 80 chars)
 - tone_of_voice: e.g. "technical", "enterprise", "friendly B2B" (max 40 chars)
-- ai_readiness_score: integer 0-100. Scoring guide:
-    +15 if robots.txt found
-    +15 if sitemap.xml found
-    +10 if all major AI bots allowed
-    +20 if llms.txt found and has real content
-    +15 if schema.org completeness > 30
-    +10 if Wikipedia presence
-    +15 if clear homepage title, description, and positioning
-  Score accordingly — do not give low scores for items confirmed as present.
-- geo_gaps: array of short actionable strings. Only include gaps for items confirmed MISSING in the data above. Do NOT list gaps for robots.txt, sitemap, or bot access if they are confirmed present."""
+- geo_gaps: array of short actionable strings. ONLY include gaps for items confirmed MISSING above.
+  Do NOT mention robots.txt, sitemap.xml, or bot access if they are confirmed present.
+  Focus on content quality gaps: missing schema.org, missing llms.txt, no Wikipedia, thin content, unclear positioning."""
 
     if not mistral_client:
         return {"positioning": None, "target_market": None, "tone_of_voice": None,
@@ -760,15 +794,16 @@ Return a JSON object with exactly these keys:
         except json.JSONDecodeError:
             parsed = {
                 "positioning": None, "target_market": None,
-                "tone_of_voice": None, "ai_readiness_score": None, "geo_gaps": [],
+                "tone_of_voice": None, "geo_gaps": [],
             }
+        parsed.pop("ai_readiness_score", None)  # score is computed in Python, not by Mistral
         parsed["raw"] = raw
         return parsed
     except Exception as e:
         print(f"[geo_synthesis] ERROR: {e}")
         return {
             "positioning": None, "target_market": None,
-            "tone_of_voice": None, "ai_readiness_score": None,
+            "tone_of_voice": None,
             "geo_gaps": [], "raw": None,
         }
 
@@ -966,6 +1001,20 @@ async def scan(request: Request, body: ScanRequest):
         robots_for_prompt, sitemap_found, sitemap_count,
     )
 
+    # Score computed from hard data — not hallucinated by the LLM
+    ai_readiness_score = compute_ai_readiness_score(
+        robots_found=robots_found,
+        sitemap_found=sitemap_found,
+        sitemap_count=sitemap_count,
+        bots=robots_for_prompt,
+        llms_txt_found=llms_txt_found,
+        llms_txt_content=llms_txt_content,
+        wikipedia_found=wikipedia.get("found", False),
+        schema_completeness=schema_completeness,
+        homepage_title=homepage.get("title"),
+        homepage_description=homepage.get("description"),
+    )
+
     # ── 8. Write scan to Supabase ─────────────────────────────────────────────
     scan_row = {
         "domain": raw_domain,
@@ -1022,7 +1071,7 @@ async def scan(request: Request, body: ScanRequest):
         "geo_positioning": geo.get("positioning"),
         "geo_target_market": geo.get("target_market"),
         "geo_tone_of_voice": geo.get("tone_of_voice"),
-        "geo_ai_readiness_score": geo.get("ai_readiness_score"),
+        "geo_ai_readiness_score": ai_readiness_score,
         "geo_gaps": geo.get("geo_gaps", []),
         "geo_synthesis_raw": geo.get("raw"),
         "geo_model_used": "mistral-small-latest",
@@ -1089,7 +1138,7 @@ async def scan(request: Request, body: ScanRequest):
         "geo_positioning": geo.get("positioning"),
         "geo_target_market": geo.get("target_market"),
         "geo_tone_of_voice": geo.get("tone_of_voice"),
-        "geo_ai_readiness_score": geo.get("ai_readiness_score"),
+        "geo_ai_readiness_score": ai_readiness_score,
         "geo_gaps": geo.get("geo_gaps", []),
         "wikipedia_found": wikipedia.get("found", False),
         "wikipedia_url": wikipedia.get("url"),
