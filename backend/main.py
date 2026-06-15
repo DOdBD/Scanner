@@ -1170,7 +1170,7 @@ class SendReportRequest(BaseModel):
 
 
 @app.post("/send-report")
-@limiter.limit("5/hour")
+@limiter.limit("10/hour")
 async def send_report_endpoint(request: Request, body: SendReportRequest):
     if not body.consent:
         return {"ok": False, "error": "Consent is required."}
