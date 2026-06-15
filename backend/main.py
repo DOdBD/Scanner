@@ -27,7 +27,13 @@ import os
 load_dotenv()
 
 # ─── Rate limiter ─────────────────────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+limiter = Limiter(key_func=_get_client_ip, default_limits=[])
 
 def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse({"error": "Too many requests. Please try again later."}, status_code=429)
