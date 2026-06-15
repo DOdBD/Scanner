@@ -87,16 +87,13 @@ supabase = create_client(_supabase_url, _supabase_key) if _supabase_url and _sup
 mistral_client = Mistral(api_key=_mistral_key) if _mistral_key else None
 
 @app.get("/health")
-def health(request: Request):
+def health():
     return {
         "status": "ok",
         "SUPABASE_URL":    "set" if _supabase_url else "MISSING",
         "SUPABASE_KEY":    "set" if _supabase_key else "MISSING",
         "MISTRAL_API_KEY": "set" if _mistral_key  else "MISSING",
         "BREVO_API_KEY":   "set" if _brevo_key    else "MISSING",
-        "client_host":     request.client.host if request.client else None,
-        "x_forwarded_for": request.headers.get("x-forwarded-for"),
-        "x_real_ip":       request.headers.get("x-real-ip"),
     }
 
 # ─── Fingerprint tables (ported from domain-scanner.html) ─────────────────────
