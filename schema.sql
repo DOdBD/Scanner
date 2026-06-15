@@ -115,6 +115,12 @@ alter table leads
   add constraint leads_first_scan_id_fkey
   foreign key (first_scan_id) references scans(id);
 
+-- ─── Row Level Security ───────────────────────────────────────────────────────
+-- Service role key bypasses RLS — backend continues to work.
+-- All other roles (anon, authenticated) are blocked by default with no policies.
+alter table scans enable row level security;
+alter table leads enable row level security;
+
 -- ─── indexes ──────────────────────────────────────────────────────────────────
 create index if not exists idx_scans_domain_scanned_at on scans (domain, scanned_at desc);
 create index if not exists idx_scans_is_latest         on scans (is_latest) where is_latest = true;

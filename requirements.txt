@@ -7,4 +7,5 @@ lxml
 mistralai==1.9.11
 supabase
 python-dotenv
-pydantic
+pydantic[email]
+slowapi

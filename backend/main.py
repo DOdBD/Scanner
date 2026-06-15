@@ -1,7 +1,9 @@
 import asyncio
 import hashlib
+import ipaddress
 import json
 import re
+import uuid as uuid_lib
 import xml.etree.ElementTree as ET
 from typing import Optional
 from urllib.parse import urljoin
@@ -11,21 +13,63 @@ import dns.resolver
 import httpx
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from supabase import create_client
 import os
 
 load_dotenv()
 
+# ─── Rate limiter ─────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse({"error": "Too many requests. Please try again later."}, status_code=429)
+
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["POST"],
-    allow_headers=["*"],
+    allow_origins=["https://dodbd.github.io"],
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
 )
+
+# ─── SSRF protection ──────────────────────────────────────────────────────────
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network(n) for n in [
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "127.0.0.0/8", "169.254.0.0/16",   # loopback + AWS/GCP metadata
+        "0.0.0.0/8", "100.64.0.0/10",       # any + carrier-grade NAT
+        "::1/128", "fc00::/7", "fe80::/10",  # IPv6 private
+    ]
+]
+
+def _is_safe_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+        return not any(addr in net for net in _BLOCKED_NETWORKS)
+    except ValueError:
+        return False
+
+def _assert_safe_domain(domain: str) -> None:
+    """Raises HTTPException(400) if domain is a raw private IP."""
+    try:
+        addr = ipaddress.ip_address(domain)
+        if any(addr in net for net in _BLOCKED_NETWORKS):
+            raise HTTPException(status_code=400, detail="Invalid domain.")
+        raise HTTPException(status_code=400, detail="Raw IP addresses are not allowed.")
+    except (ValueError, HTTPException) as e:
+        if isinstance(e, HTTPException):
+            raise
 
 _supabase_url  = os.getenv("SUPABASE_URL") or ""
 _supabase_key  = os.getenv("SUPABASE_KEY") or ""
@@ -601,7 +645,7 @@ HEADERS = {
 
 async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Response]:
     try:
-        r = await client.get(url, timeout=10, follow_redirects=True, headers=HEADERS)
+        r = await client.get(url, timeout=10, follow_redirects=False, headers=HEADERS)
         return r
     except Exception:
         return None
@@ -678,7 +722,7 @@ Return a JSON object with exactly these keys:
         return {
             "positioning": None, "target_market": None,
             "tone_of_voice": None, "ai_readiness_score": None,
-            "geo_gaps": [], "raw": None, "_error": str(e),
+            "geo_gaps": [], "raw": None,
         }
 
 
@@ -686,16 +730,22 @@ Return a JSON object with exactly these keys:
 
 class ScanRequest(BaseModel):
     domain: str
-    email: Optional[str] = None
 
 # ─── Main scan endpoint ───────────────────────────────────────────────────────
 
 @app.post("/scan")
+@limiter.limit("10/hour")
 async def scan(request: Request, body: ScanRequest):
     raw_domain = body.domain.strip().lower()
     raw_domain = re.sub(r"^https?://", "", raw_domain)
     raw_domain = re.sub(r"^www\.", "", raw_domain)
-    raw_domain = raw_domain.split("/")[0]
+    raw_domain = raw_domain.split("/")[0].split(":")[0]  # strip path and port
+
+    if not raw_domain or "." not in raw_domain:
+        raise HTTPException(status_code=400, detail="Invalid domain.")
+
+    # SSRF: block raw IP addresses immediately
+    _assert_safe_domain(raw_domain)
 
     # Hash requester IP for privacy
     client_ip = request.client.host if request.client else "unknown"
@@ -711,8 +761,13 @@ async def scan(request: Request, body: ScanRequest):
         asyncio.to_thread(dns_lookup, raw_domain, "CAA"),
     )
 
+    # SSRF: block if any resolved IP is in a private range
+    for ip in a_raw + aaaa_raw:
+        if not _is_safe_ip(ip):
+            raise HTTPException(status_code=400, detail="Domain resolves to a non-routable address.")
+
     # ── 2. HTTP fetches ───────────────────────────────────────────────────────
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient(verify=True) as client:
         homepage_resp, robots_resp, llms_resp, llms_full_resp, sitemap_resp = await asyncio.gather(
             fetch_url(client, f"https://{raw_domain}"),
             fetch_url(client, f"https://{raw_domain}/robots.txt"),
@@ -798,9 +853,9 @@ async def scan(request: Request, body: ScanRequest):
         raw_llms = llms_resp.text.strip()
         if raw_llms.lower().startswith("<!doctype") or raw_llms.lower().startswith("<html"):
             soup = BeautifulSoup(raw_llms, "html.parser")
-            llms_txt_content = soup.get_text(separator="\n", strip=True)
+            llms_txt_content = soup.get_text(separator="\n", strip=True)[:5000]
         else:
-            llms_txt_content = raw_llms
+            llms_txt_content = raw_llms[:5000]
     else:
         llms_txt_content = None
 
@@ -888,7 +943,7 @@ async def scan(request: Request, body: ScanRequest):
         "robots_txt_allows_claudebot": robots.get("allows_claudebot"),
         "robots_txt_allows_perplexity": robots.get("allows_perplexity"),
         "robots_txt_allows_google_extended": robots.get("allows_google_extended"),
-        "robots_txt_raw": robots_content or None,
+        "robots_txt_raw": robots_content[:5000] if robots_content else None,
         "llms_txt_found": llms_txt_found,
         "llms_full_txt_found": llms_full_txt_found,
         "llms_txt_content": llms_txt_content,
@@ -924,21 +979,8 @@ async def scan(request: Request, body: ScanRequest):
         except Exception as e:
             print(f"[supabase] scan write failed: {e}")
 
-    # ── 9. Write lead if email provided ───────────────────────────────────────
-    if body.email and scan_id:
-        try:
-            lead_row = {
-                "email": body.email,
-                "domain": raw_domain,
-                "first_scan_id": scan_id,
-                "gdpr_consent": True,
-                "gdpr_consent_at": "now()",
-            }
-            supabase.table("leads").upsert(lead_row, on_conflict="email").execute()
-        except Exception as e:
-            print(f"[supabase] lead write failed: {e}")
-
-    # ── 10. Return result ─────────────────────────────────────────────────────
+    # ── 9. Return result ──────────────────────────────────────────────────────
+    # Lead capture happens in /send-report only, after explicit GDPR consent.
     return {
         "scan_id": scan_id,
         "domain": raw_domain,
@@ -1123,18 +1165,25 @@ def build_email_html(s: dict) -> str:
 
 class SendReportRequest(BaseModel):
     scan_id: str
-    email: str
+    email: EmailStr
     consent: bool
 
 
 @app.post("/send-report")
-async def send_report_endpoint(body: SendReportRequest):
+@limiter.limit("5/hour")
+async def send_report_endpoint(request: Request, body: SendReportRequest):
     if not body.consent:
         return {"ok": False, "error": "Consent is required."}
     if not _brevo_key or not _brevo_from:
         return {"ok": False, "error": "Email sending is not configured on this server."}
     if not supabase:
         return {"ok": False, "error": "Database not configured."}
+
+    # Validate scan_id is a proper UUID before hitting the DB
+    try:
+        uuid_lib.UUID(body.scan_id)
+    except ValueError:
+        return {"ok": False, "error": "Invalid scan ID."}
 
     result = supabase.table("scans").select("*").eq("id", body.scan_id).limit(1).execute()
     if not result.data:
