@@ -657,11 +657,11 @@ async def _ssrf_redirect_guard(response: httpx.Response) -> None:
             host = httpx.URL(location).host
             if host:
                 try:
-                    # Only act if the redirect target is a raw IP address
-                    if not _is_safe_ip(host):
+                    addr = ipaddress.ip_address(host)  # raises ValueError for hostnames
+                    if any(addr in net for net in _BLOCKED_NETWORKS):
                         raise httpx.InvalidURL(f"Redirect to private IP blocked: {host}")
                 except ValueError:
-                    pass  # Not an IP address — hostname redirects are allowed
+                    pass  # hostname, not a raw IP — safe to follow
 
 async def fetch_url(client: httpx.AsyncClient, url: str) -> Optional[httpx.Response]:
     try:
