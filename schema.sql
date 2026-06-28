@@ -110,7 +110,10 @@ create table if not exists scans (
   stack_delta             jsonb,
 
   -- content enrichment
-  external_links_top_10   jsonb
+  external_links_top_10   jsonb,
+  contact_emails          text[],
+  has_contact_form        boolean,
+  social_media_profiles   jsonb
 );
 
 -- ─── FK back-reference ────────────────────────────────────────────────────────

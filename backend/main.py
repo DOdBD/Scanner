@@ -671,6 +671,124 @@ def extract_external_links(html: str, domain: str) -> list:
     except Exception:
         return []
 
+# ─── Email extraction ─────────────────────────────────────────────────────────
+
+def extract_emails(html: str, domain: str) -> dict:
+    """Extract emails from HTML. Returns dict with found emails and their contexts."""
+    if not html:
+        return {"emails": [], "email_count": 0, "has_contact_form": False}
+
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        emails = set()
+
+        # 1. Extract from mailto links
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag.get("href", "").lower()
+            if href.startswith("mailto:"):
+                email = href.replace("mailto:", "").split("?")[0].strip()
+                if "@" in email:
+                    emails.add(email)
+
+        # 2. Extract from contact form inputs
+        has_contact_form = False
+        for form in soup.find_all("form"):
+            if any(kw in str(form).lower() for kw in ["contact", "email", "inquiry"]):
+                has_contact_form = True
+            for inp in form.find_all(["input", "textarea"]):
+                name = inp.get("name", "").lower()
+                placeholder = inp.get("placeholder", "").lower()
+                if any(kw in (name + placeholder) for kw in ["email", "mail"]):
+                    has_contact_form = True
+
+        # 3. Regex pattern for email-like strings in text (conservative)
+        text_content = soup.get_text()
+        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+        found_emails = re.findall(email_pattern, text_content)
+        for email in found_emails:
+            # Filter out obviously fake ones
+            if email not in ["example.com", "test@test.com", "user@example.com"]:
+                emails.add(email)
+
+        # Filter: only keep emails from the domain or common email services
+        valid_emails = []
+        for email in emails:
+            email_domain = email.split("@")[1].lower()
+            # Keep: emails from the domain itself, or well-known providers (gmail, outlook, etc.)
+            if email_domain == domain or email_domain in [
+                "gmail.com", "outlook.com", "yahoo.com", "protonmail.com",
+                "company.com", "corp.com", "business.com"
+            ]:
+                valid_emails.append(email)
+
+        return {
+            "emails": sorted(list(emails)),
+            "email_count": len(emails),
+            "has_contact_form": has_contact_form,
+        }
+    except Exception:
+        return {"emails": [], "email_count": 0, "has_contact_form": False}
+
+# ─── Social media detection ───────────────────────────────────────────────────
+
+SOCIAL_PLATFORMS = {
+    "linkedin.com": {"name": "LinkedIn", "handle_pattern": r"(?:in|company)/([a-z0-9-]+)"},
+    "twitter.com": {"name": "Twitter/X", "handle_pattern": r"twitter\.com/([a-z0-9_]+)"},
+    "x.com": {"name": "Twitter/X", "handle_pattern": r"x\.com/([a-z0-9_]+)"},
+    "github.com": {"name": "GitHub", "handle_pattern": r"github\.com/([a-z0-9-]+)"},
+    "facebook.com": {"name": "Facebook", "handle_pattern": r"facebook\.com/([a-z0-9.%-]+)"},
+    "instagram.com": {"name": "Instagram", "handle_pattern": r"instagram\.com/([a-z0-9_.]+)"},
+    "youtube.com": {"name": "YouTube", "handle_pattern": r"youtube\.com/(@?[a-z0-9-]+)"},
+    "youtu.be": {"name": "YouTube", "handle_pattern": r"youtu\.be/"},
+    "tiktok.com": {"name": "TikTok", "handle_pattern": r"tiktok\.com/@([a-z0-9_.]+)"},
+    "threads.net": {"name": "Threads", "handle_pattern": r"threads\.net/@([a-z0-9_.]+)"},
+    "bluesky.social": {"name": "Bluesky", "handle_pattern": r"bsky\.app/profile/([a-z0-9.]+)"},
+    "mastodon.social": {"name": "Mastodon", "handle_pattern": r"mastodon\.social/@([a-z0-9_]+)"},
+    "discord.com": {"name": "Discord", "handle_pattern": r"discord\.com/"},
+}
+
+def extract_social_media(html: str) -> dict:
+    """Extract social media links from HTML."""
+    if not html:
+        return {"platforms": [], "platform_count": 0}
+
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        found_platforms = {}
+
+        # Extract from all links
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag.get("href", "").lower()
+            if not href:
+                continue
+
+            # Check against known platforms
+            for platform_domain, config in SOCIAL_PLATFORMS.items():
+                if platform_domain in href:
+                    # Extract handle/username if possible
+                    match = re.search(config["handle_pattern"], href, re.I)
+                    handle = match.group(1) if match else None
+
+                    # Use canonical name (deduplicate Twitter/X)
+                    platform_name = config["name"]
+
+                    if platform_name not in found_platforms:
+                        found_platforms[platform_name] = {
+                            "platform": platform_name,
+                            "url": href.split("?")[0],  # Remove query params
+                            "handle": handle,
+                        }
+                    break
+
+        # Convert to list
+        platforms = list(found_platforms.values())
+        return {
+            "platforms": sorted(platforms, key=lambda x: x["platform"]),
+            "platform_count": len(platforms),
+        }
+    except Exception:
+        return {"platforms": [], "platform_count": 0}
+
 # ─── Company name extraction ──────────────────────────────────────────────────
 
 def extract_company_name(title: Optional[str], domain: str) -> str:
@@ -977,6 +1095,8 @@ async def scan(request: Request, body: ScanRequest):
     homepage_html = homepage_resp.text if homepage_resp and homepage_resp.status_code < 400 else ""
     homepage = parse_homepage(homepage_html) if homepage_html else {}
     external_links = extract_external_links(homepage_html, raw_domain) if homepage_html else []
+    emails_data = extract_emails(homepage_html, raw_domain) if homepage_html else {"emails": [], "email_count": 0, "has_contact_form": False}
+    social_media = extract_social_media(homepage_html) if homepage_html else {"platforms": [], "platform_count": 0}
 
     # ── 4. Parse robots.txt ───────────────────────────────────────────────────
     robots_content = ""
@@ -1192,6 +1312,9 @@ async def scan(request: Request, body: ScanRequest):
         "schema_org_fields": schema_fields,
         "stack_delta": stack_delta or None,
         "external_links_top_10": external_links,
+        "contact_emails": emails_data.get("emails", []),
+        "has_contact_form": emails_data.get("has_contact_form", False),
+        "social_media_profiles": social_media.get("platforms", []),
     }
 
     scan_id = None
@@ -1258,6 +1381,9 @@ async def scan(request: Request, body: ScanRequest):
         "schema_org_fields": schema_fields,
         "stack_delta": stack_delta or None,
         "external_links_top_10": external_links,
+        "contact_emails": emails_data.get("emails", []),
+        "has_contact_form": emails_data.get("has_contact_form", False),
+        "social_media_profiles": social_media.get("platforms", []),
         "tld": tld,
         "inferred_country": country,
     }
