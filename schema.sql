@@ -107,7 +107,10 @@ create table if not exists scans (
   schema_org_fields       text[],
 
   -- stack delta (vs previous scan)
-  stack_delta             jsonb
+  stack_delta             jsonb,
+
+  -- content enrichment
+  external_links_top_10   jsonb
 );
 
 -- ─── FK back-reference ────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import re
 import uuid as uuid_lib
 import xml.etree.ElementTree as ET
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from mistralai import Mistral
 import dns.resolver
@@ -561,6 +561,116 @@ def infer_country(tld: str) -> Optional[str]:
     }
     return mapping.get(tld)
 
+# ─── External link authority scoring ───────────────────────────────────────
+
+HIGH_AUTHORITY_DOMAINS = {
+    "wikipedia.org": 95, "github.com": 90, "stackoverflow.com": 88,
+    "medium.com": 85, "techcrunch.com": 85, "forbes.com": 85,
+    "ycombinator.com": 90, "crunchbase.com": 80, "producthunt.com": 80,
+    "hackernews.com": 85, "news.ycombinator.com": 85,
+    "linkedin.com": 90, "twitter.com": 85, "x.com": 85,
+    "bbc.com": 92, "cnn.com": 92, "reuters.com": 90,
+    "economist.com": 88, "wsj.com": 88, "ft.com": 88,
+    "harvard.edu": 95, "mit.edu": 95, "stanford.edu": 95,
+    "github.io": 75, "medium.com": 85, "substack.com": 70,
+}
+
+def score_link_authority(url: str) -> int:
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower().replace("www.", "")
+
+        # Check against high-authority list
+        for auth_domain, score in HIGH_AUTHORITY_DOMAINS.items():
+            if domain.endswith(auth_domain) or domain == auth_domain:
+                return score
+
+        # Heuristic scoring for unlisted domains
+        score = 40
+        tld = domain.rsplit(".", 1)[-1] if "." in domain else ""
+
+        # Government/education TLDs
+        if tld in ("edu", "gov", "ac"): score += 35
+        # Country code TLDs (established)
+        elif tld in ("uk", "de", "fr", "ca", "au", "jp"): score += 15
+        # Common commercial TLDs
+        elif tld in ("com", "org", "net"): score += 5
+
+        # Penalty for suspicious TLDs
+        if tld in ("xyz", "top", "review"): score -= 20
+
+        # Domain age/establishment signal (simulated via domain length)
+        if len(domain) < 20: score += 5
+
+        return min(max(score, 10), 100)
+    except Exception:
+        return 30
+
+def extract_external_links(html: str, domain: str) -> list:
+    """Extract external links and rank by SEO authority. Returns top 10."""
+    if not html:
+        return []
+
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        links_data = {}
+
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag.get("href", "").strip()
+            if not href or href.startswith("#"):
+                continue
+
+            # Parse URL
+            try:
+                abs_url = urljoin(f"https://{domain}", href)
+                parsed = urlparse(abs_url)
+                link_domain = parsed.netloc.lower().replace("www.", "")
+
+                # Skip internal links
+                if domain in link_domain or link_domain == domain:
+                    continue
+
+                # Skip mailto, tel, etc.
+                if not parsed.scheme in ("http", "https"):
+                    continue
+
+                # Get anchor text
+                anchor_text = a_tag.get_text(strip=True)[:100]
+
+                # Aggregate by domain (keep best anchor text)
+                if link_domain not in links_data:
+                    links_data[link_domain] = {
+                        "url": abs_url,
+                        "anchor_text": anchor_text,
+                        "count": 1,
+                    }
+                else:
+                    links_data[link_domain]["count"] += 1
+                    # Keep more descriptive anchor text
+                    if len(anchor_text) > len(links_data[link_domain]["anchor_text"]):
+                        links_data[link_domain]["anchor_text"] = anchor_text
+            except Exception:
+                continue
+
+        # Score and rank
+        scored_links = []
+        for link_domain, data in links_data.items():
+            authority = score_link_authority(data["url"])
+            scored_links.append({
+                "domain": link_domain,
+                "url": data["url"],
+                "anchor_text": data["anchor_text"] or "(no text)",
+                "authority_score": authority,
+                "count": data["count"],
+            })
+
+        # Sort by authority score descending
+        scored_links.sort(key=lambda x: x["authority_score"], reverse=True)
+        return scored_links[:10]  # Top 10
+
+    except Exception:
+        return []
+
 # ─── Company name extraction ──────────────────────────────────────────────────
 
 def extract_company_name(title: Optional[str], domain: str) -> str:
@@ -866,6 +976,7 @@ async def scan(request: Request, body: ScanRequest):
     # ── 3. Parse homepage ─────────────────────────────────────────────────────
     homepage_html = homepage_resp.text if homepage_resp and homepage_resp.status_code < 400 else ""
     homepage = parse_homepage(homepage_html) if homepage_html else {}
+    external_links = extract_external_links(homepage_html, raw_domain) if homepage_html else []
 
     # ── 4. Parse robots.txt ───────────────────────────────────────────────────
     robots_content = ""
@@ -1080,6 +1191,7 @@ async def scan(request: Request, body: ScanRequest):
         "schema_org_completeness": schema_completeness,
         "schema_org_fields": schema_fields,
         "stack_delta": stack_delta or None,
+        "external_links_top_10": external_links,
     }
 
     scan_id = None
@@ -1145,6 +1257,7 @@ async def scan(request: Request, body: ScanRequest):
         "schema_org_completeness": schema_completeness,
         "schema_org_fields": schema_fields,
         "stack_delta": stack_delta or None,
+        "external_links_top_10": external_links,
         "tld": tld,
         "inferred_country": country,
     }
@@ -1191,11 +1304,13 @@ def build_email_html(s: dict) -> str:
 
     positioning_block = ""
     if s.get("geo_positioning"):
+        target_market = s.get("geo_target_market")
+        target_block = f"<div style='font-size:14px;color:#6B7280;margin-top:6px'>Target: {target_market}</div>" if target_market else ""
         positioning_block = (
             f"<div style='background:#F0FDFA;border-left:4px solid #00B4A0;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:28px'>"
             f"<div style='font-size:12px;font-weight:700;color:#00B4A0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px'>Positioning</div>"
             f"<div style='font-size:16px;color:#1A2B4A;line-height:1.5'>{s['geo_positioning']}</div>"
-            f"{'<div style=\"font-size:14px;color:#6B7280;margin-top:6px\">Target: ' + s['geo_target_market'] + '</div>' if s.get('geo_target_market') else ''}"
+            f"{target_block}"
             f"</div>"
         )
 
